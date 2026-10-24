@@ -32,6 +32,7 @@ public class SoloSystemClient implements ClientModInitializer {
 		HudElementRegistry.addLast(SoloSystemMod.id("quest_toasts"), (graphics, deltaTracker) -> QuestToasts.render(graphics));
 		HudElementRegistry.addLast(SoloSystemMod.id("popups"), (graphics, deltaTracker) -> Popups.render(graphics));
 		HudElementRegistry.addLast(SoloSystemMod.id("radar"), (graphics, deltaTracker) -> RadarHud.render(graphics));
+		HudElementRegistry.addLast(SoloSystemMod.id("abilities"), (graphics, deltaTracker) -> AbilityHud.render(graphics));
 
 		KeyMapping.Category category = KeyMapping.Category.register(SoloSystemMod.id("main"));
 		KeyMapping open = KeyMappingHelper.registerKeyMapping(

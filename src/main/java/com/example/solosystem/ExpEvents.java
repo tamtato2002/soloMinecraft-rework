@@ -32,21 +32,40 @@ public final class ExpEvents {
 	private static final TagKey<Block> GOLD = tag("gold_ores");
 	private static final TagKey<Block> DIAMOND = tag("diamond_ores");
 	private static final TagKey<Block> EMERALD = tag("emerald_ores");
-	private static final TagKey<Block> CROPS = tag("crops");
+	private static final TagKey<Block> CROPS = SoloTags.CROPS;
 
 	public static void register() {
 		PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, be) -> {
 			if (!(player instanceof ServerPlayer sp) || sp.isCreative()) return;
 			SystemLogic.addExp(sp, blockExp(state, state.getDestroySpeed(level, pos)));
 			QuestLogic.progress(sp, QuestType.MINE, 1);
+			boolean stone = state.is(SoloTags.STONE_OVERWORLD) || state.is(SoloTags.STONE_NETHER);
 			if (state.is(BlockTags.LOGS)) QuestLogic.progress(sp, QuestType.CHOP, 1);
 			if (isOre(state)) QuestLogic.progress(sp, QuestType.ORE, 1);
+			if (stone) QuestLogic.progress(sp, QuestType.STONE, 1);
+			if (state.is(CROPS)) QuestLogic.progress(sp, QuestType.HARVEST, 1);
+			blockSkillRoll(sp, state, stone);
 		});
 
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
 			if (!(source.getEntity() instanceof ServerPlayer sp) || entity instanceof ServerPlayer) return;
 			onKill(sp, entity);
 		});
+	}
+
+	/** Passive skills can be found by mining stone / ores, chopping trees and farming (always random). */
+	private static void blockSkillRoll(ServerPlayer sp, BlockState s, boolean stone) {
+		double chance = 0, boost = 0;
+		if (s.is(Blocks.ANCIENT_DEBRIS)) { chance = 0.02; boost = 3; }
+		else if (s.is(EMERALD)) { chance = 0.010; boost = 1.5; }
+		else if (s.is(DIAMOND)) { chance = 0.008; boost = 1.0; }
+		else if (s.is(GOLD)) { chance = 0.003; boost = 0.5; }
+		else if (s.is(IRON) || s.is(LAPIS) || s.is(REDSTONE)) chance = 0.002;
+		else if (s.is(COAL) || s.is(COPPER) || s.is(SoloTags.C_ORES)) chance = 0.0015;
+		else if (s.is(BlockTags.LOGS)) chance = 0.0006;
+		else if (s.is(CROPS)) chance = 0.0008;
+		else if (stone) chance = 0.0004;
+		if (chance > 0) SystemLogic.rollSkill(sp, chance, boost);
 	}
 
 	private static boolean isOre(BlockState s) {
@@ -77,6 +96,7 @@ public final class ExpEvents {
 		if (boss) exp += 1000;
 		SystemLogic.addExp(sp, exp);
 		if (hostile) QuestLogic.progress(sp, QuestType.KILL, 1);
+		else QuestLogic.progress(sp, QuestType.HUNT, 1);
 
 		// skill drop from monsters
 		double chance = boss ? 1.0 : hostile ? Math.min(0.5, 0.02 + hp * 0.002) : 0.005;

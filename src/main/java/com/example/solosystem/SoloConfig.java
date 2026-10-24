@@ -23,6 +23,9 @@ public final class SoloConfig {
 		public boolean enableCrit = true;
 		public boolean enableResistance = true;
 		public boolean enableMasterwork = true;
+		public boolean enableDominion = true;
+		public boolean enableReflect = true;
+		public boolean autoModItems = true; // quest rewards may include items from other mods automatically
 		public int resistMaxPercent = 75;
 
 		// ---- client / HUD
@@ -77,7 +80,7 @@ public final class SoloConfig {
 		d.skillDropMultiplier = Math.max(0, Math.min(10, d.skillDropMultiplier));
 		d.lootMultiplier = Math.max(0, Math.min(10, d.lootMultiplier));
 		d.questExpMultiplier = Math.max(0.1, Math.min(10, d.questExpMultiplier));
-		d.questsPerDay = Math.max(1, Math.min(QuestType.values().length, d.questsPerDay));
+		d.questsPerDay = Math.max(1, Math.min(5, d.questsPerDay));
 		d.resistMaxPercent = Math.max(5, Math.min(95, d.resistMaxPercent));
 		d.toastSeconds = Math.max(0.5, Math.min(10, d.toastSeconds));
 		d.radarSize = Math.max(50, Math.min(200, d.radarSize));

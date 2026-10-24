@@ -17,7 +17,9 @@ public enum Stat {
 		new Ability("Environmental Resistance", "Longer breath, resist fire / lava / poison", 60)}),
 	INTELLIGENCE("intelligence", "Intelligence", "Knowledge and enchanting", new Ability[]{
 		new Ability("XP Gain Multiplier", "+1% EXP gained / point", 0),
-		new Ability("Enchanting & Crafting Luck", "Crafted gear may be Masterwork / Legendary", 20)}),
+		new Ability("Enchanting & Crafting Luck", "Crafted gear may be Masterwork / Legendary", 20),
+		new Ability("Dominion", "Attacker may turn ally for a while, then dies (cooldown)", 40),
+		new Ability("Mirror Ward", "Reflects spells, poisons & effects back at the attacker", 60)}),
 	SENSE("sense", "Sense", "Crits, detection and awareness", new Ability[]{
 		new Ability("Critical Hit", "Crit chance and crit damage", 0),
 		new Ability("HUD Radar", "Radar shows monsters and rare ores", 20),

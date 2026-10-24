@@ -24,6 +24,8 @@ public class SystemScreen extends Screen {
 
 	private int tab = 0;
 	private int selStat = 0;
+	private int skillPage = 0;
+	private int cfgPage = 0;
 
 	private record Label(Component text, int x, int y) {}
 	private record Pic(int icon, int x, int y, int scale) {}
@@ -134,10 +136,23 @@ public class SystemScreen extends Screen {
 		int found = 0;
 		for (PassiveSkill s : all) if (d.rank(s) > 0) found++;
 		label(Component.literal("Passive Skills discovered: " + found + "/" + all.length).withStyle(ChatFormatting.YELLOW), left, y);
-		y += 14;
 
-		int rowH = Math.max(9, Math.min(12, (height - y - 8) / all.length));
-		for (int i = all.length - 1; i >= 0; i--) { // rarest first
+		final int perPage = 14;
+		int pages = (all.length + perPage - 1) / perPage;
+		skillPage = Math.max(0, Math.min(pages - 1, skillPage));
+		Button prev = Button.builder(Component.literal("<"), b -> { skillPage--; rebuildWidgets(); }).bounds(cx + 90, y - 5, 20, 16).build();
+		Button next = Button.builder(Component.literal(">"), b -> { skillPage++; rebuildWidgets(); }).bounds(cx + 112, y - 5, 20, 16).build();
+		prev.active = skillPage > 0;
+		next.active = skillPage < pages - 1;
+		addRenderableWidget(prev);
+		addRenderableWidget(next);
+		label(Component.literal("Page " + (skillPage + 1) + "/" + pages).withStyle(ChatFormatting.GRAY), cx + 136, y);
+		y += 16;
+
+		// rarest first
+		int shown = 0, idx = 0;
+		for (int i = all.length - 1; i >= 0; i--, idx++) {
+			if (idx < skillPage * perPage || shown >= perPage) continue;
 			PassiveSkill s = all[i];
 			int rank = d.rank(s);
 			Component c;
@@ -148,7 +163,8 @@ public class SystemScreen extends Screen {
 				c = Component.literal("??? (" + s.rarity.name() + ")").withStyle(ChatFormatting.DARK_GRAY);
 			}
 			label(c, left, y);
-			y += rowH;
+			y += 12;
+			shown++;
 		}
 	}
 
@@ -252,32 +268,42 @@ public class SystemScreen extends Screen {
 		int lx = cx - 190, rx = cx + 10;
 		pics.add(new Pic(Icons.CONFIG, lx, y - 3, 1));
 		label(Component.literal("CONFIG").withStyle(ChatFormatting.GOLD)
-			.append(Component.literal("   saved to config/solosystem.json").withStyle(ChatFormatting.GRAY)), lx + 20, y);
-		y += 16;
-
-		toggle(0, lx, y, "Notifications", () -> c.notifications, v -> c.notifications = v);
-		toggle(1, lx, y, "HUD Radar", () -> c.radar, v -> c.radar = v);
-		addRenderableWidget(Button.builder(Component.literal("Radar corner: " + CORNERS[c.radarCorner]), b -> {
-			c.radarCorner = (c.radarCorner + 1) % 4;
-			SoloConfig.save();
+			.append(Component.literal("  config/solosystem.json").withStyle(ChatFormatting.GRAY)), lx + 20, y);
+		addRenderableWidget(Button.builder(Component.literal("Page: " + (cfgPage == 0 ? "Toggles" : "Numbers") + "  >"), b -> {
+			cfgPage = 1 - cfgPage;
 			rebuildWidgets();
-		}).bounds(lx, y + 2 * 21, 180, 20).build());
-		toggle(3, lx, y, "Menu pauses game", () -> c.menuPausesGame, v -> c.menuPausesGame = v);
-		toggle(4, lx, y, "Dodge (MISS!)", () -> c.enableDodge, v -> c.enableDodge = v);
-		toggle(5, lx, y, "Critical hits", () -> c.enableCrit, v -> c.enableCrit = v);
-		toggle(6, lx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
-		toggle(7, lx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);
+		}).bounds(cx + 60, y - 5, 130, 16).build());
+		y += 18;
 
-		number(0, rx, y, "EXP rate", () -> c.expMultiplier, v -> c.expMultiplier = v, 0.25, 0.25, 10, "x%.2f");
-		number(1, rx, y, "Skill drop", () -> c.skillDropMultiplier, v -> c.skillDropMultiplier = v, 0.25, 0, 10, "x%.2f");
-		number(2, rx, y, "Loot drop", () -> c.lootMultiplier, v -> c.lootMultiplier = v, 0.25, 0, 10, "x%.2f");
-		number(3, rx, y, "Quest EXP", () -> c.questExpMultiplier, v -> c.questExpMultiplier = v, 0.25, 0.25, 10, "x%.2f");
-		number(4, rx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, QuestType.values().length, "%.0f");
-		number(5, rx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, "%.1f");
-		number(6, rx, y, "Radar size", () -> (double) c.radarSize, v -> c.radarSize = (int) Math.round(v), 10, 50, 200, "%.0f");
-		number(7, rx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, "%.0f");
+		if (cfgPage == 0) {
+			toggle(0, lx, y, "Notifications", () -> c.notifications, v -> c.notifications = v);
+			toggle(1, lx, y, "HUD Radar", () -> c.radar, v -> c.radar = v);
+			addRenderableWidget(Button.builder(Component.literal("Radar corner: " + CORNERS[c.radarCorner]), b -> {
+				c.radarCorner = (c.radarCorner + 1) % 4;
+				SoloConfig.save();
+				rebuildWidgets();
+			}).bounds(lx, y + 2 * 21, 180, 20).build());
+			toggle(3, lx, y, "Menu pauses game", () -> c.menuPausesGame, v -> c.menuPausesGame = v);
+			toggle(4, lx, y, "Dodge (MISS!)", () -> c.enableDodge, v -> c.enableDodge = v);
+			toggle(5, lx, y, "Critical hits", () -> c.enableCrit, v -> c.enableCrit = v);
 
-		label(Component.literal("Gameplay options apply on the server / host. Add items from other mods in the JSON file.").withStyle(ChatFormatting.DARK_GRAY), lx, y + 8 * 21 + 4);
+			toggle(0, rx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
+			toggle(1, rx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);
+			toggle(2, rx, y, "Dominion (ally)", () -> c.enableDominion, v -> c.enableDominion = v);
+			toggle(3, rx, y, "Mirror Ward (reflect)", () -> c.enableReflect, v -> c.enableReflect = v);
+			toggle(4, rx, y, "Mod items in quests", () -> c.autoModItems, v -> c.autoModItems = v);
+		} else {
+			number(0, lx, y, "EXP rate", () -> c.expMultiplier, v -> c.expMultiplier = v, 0.25, 0.25, 10, "x%.2f");
+			number(1, lx, y, "Skill drop", () -> c.skillDropMultiplier, v -> c.skillDropMultiplier = v, 0.25, 0, 10, "x%.2f");
+			number(2, lx, y, "Loot drop", () -> c.lootMultiplier, v -> c.lootMultiplier = v, 0.25, 0, 10, "x%.2f");
+			number(3, lx, y, "Quest EXP", () -> c.questExpMultiplier, v -> c.questExpMultiplier = v, 0.25, 0.25, 10, "x%.2f");
+
+			number(0, rx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, "%.0f");
+			number(1, rx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, "%.1f");
+			number(2, rx, y, "Radar size", () -> (double) c.radarSize, v -> c.radarSize = (int) Math.round(v), 10, 50, 200, "%.0f");
+			number(3, rx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, "%.0f");
+		}
+		label(Component.literal("Gameplay options apply on the server / host. Extra mod items: edit the JSON file.").withStyle(ChatFormatting.DARK_GRAY), lx, y + 6 * 21 + 6);
 	}
 
 	// ------------------------------------------------------------------ render

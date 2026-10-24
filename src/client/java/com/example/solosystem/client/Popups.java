@@ -44,7 +44,7 @@ public final class Popups {
 		int slot = 0;
 		for (P p : LIST) {
 			int alpha = Math.max(40, 255 - (int) (255.0 * p.age / LIFE));
-			int rgb = p.kind == 1 ? 0xFFAA00 : 0x55FFFF;
+			int rgb = switch (p.kind) { case 1 -> 0xFFAA00; case 2 -> 0xCC66FF; case 3 -> 0xFF77DD; default -> 0x55FFFF; };
 			Component c = Component.literal(p.text).withStyle(ChatFormatting.BOLD);
 			int x = cx - font.width(p.text) / 2 + (p.kind == 1 ? 24 : -24) + slot * 6;
 			int y = cy + 14 - p.age / 2 - slot * 10;

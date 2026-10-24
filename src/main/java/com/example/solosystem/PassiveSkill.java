@@ -31,7 +31,16 @@ public enum PassiveSkill {
 	// ---- LEGENDARY
 	SOVEREIGN_REACH("sovereign_reach", "Sovereign's Reach", "+2 block reach, +1.5 entity reach", SkillRarity.LEGENDARY, 1),
 	MONARCH_DOMAIN("monarch_domain", "Monarch's Domain", "+10% EXP gain / rank", SkillRarity.LEGENDARY, 3),
-	MONARCH_AEGIS("monarch_aegis", "Monarch's Aegis", "+5 armor, +2 toughness / rank", SkillRarity.LEGENDARY, 2);
+	MONARCH_AEGIS("monarch_aegis", "Monarch's Aegis", "+5 armor, +2 toughness / rank", SkillRarity.LEGENDARY, 2),
+	// ---- NEW high-tier skills
+	VAMPIRIC_TOUCH("vampiric_touch", "Vampiric Touch", "Heal 4% of damage dealt / rank", SkillRarity.EPIC, 3),
+	EXECUTIONER("executioner", "Executioner", "+15% damage vs foes under 30% HP / rank", SkillRarity.EPIC, 3),
+	STONESKIN("stoneskin", "Stoneskin", "-5% damage taken / rank", SkillRarity.EPIC, 3),
+	SECOND_WIND("second_wind", "Second Wind", "Burst regen below 25% HP (cooldown)", SkillRarity.EPIC, 2),
+	UNDYING_WILL("undying_will", "Undying Will", "Survive a fatal blow (10 min cooldown)", SkillRarity.LEGENDARY, 1),
+	SHADOW_HASTE("shadow_haste", "Shadow Haste", "+15% move speed, +10% attack speed / rank", SkillRarity.LEGENDARY, 2),
+	WORLD_BREAKER("world_breaker", "World Breaker", "+25% break speed, +2 efficiency / rank", SkillRarity.LEGENDARY, 2),
+	SOVEREIGNS_FORTUNE("sovereigns_fortune", "Sovereign's Fortune", "+50% skill find chance / rank", SkillRarity.LEGENDARY, 2);
 
 	public final String id, displayName, desc;
 	public final SkillRarity rarity;

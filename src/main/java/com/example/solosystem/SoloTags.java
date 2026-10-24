@@ -15,6 +15,9 @@ public final class SoloTags {
 
 	public static final TagKey<Block> DIAMOND = tag("minecraft", "diamond_ores");
 	public static final TagKey<Block> EMERALD = tag("minecraft", "emerald_ores");
+	public static final TagKey<Block> STONE_OVERWORLD = tag("minecraft", "base_stone_overworld");
+	public static final TagKey<Block> STONE_NETHER = tag("minecraft", "base_stone_nether");
+	public static final TagKey<Block> CROPS = tag("minecraft", "crops");
 	public static final TagKey<Block> C_ORES = tag("c", "ores");
 	public static final TagKey<Block> C_DIAMOND = tag("c", "ores/diamond");
 	public static final TagKey<Block> C_EMERALD = tag("c", "ores/emerald");

@@ -103,7 +103,7 @@ public final class SystemLogic {
 	/** Roll for a passive skill. rarityBoost shifts odds toward rarer skills. */
 	public static void rollSkill(ServerPlayer p, double chance, double rarityBoost) {
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		if (rnd.nextDouble() >= Math.min(1.0, chance * SoloConfig.get().skillDropMultiplier)) return;
+		if (rnd.nextDouble() >= Math.min(1.0, chance * SoloConfig.get().skillDropMultiplier * (1.0 + 0.5 * data(p).rank(PassiveSkill.SOVEREIGNS_FORTUNE)))) return;
 		PlayerData d = data(p);
 
 		SkillRarity rarity = rollRarity(rnd, rarityBoost);
@@ -146,12 +146,14 @@ public final class SystemLogic {
 
 	public static void tick(MinecraftServer server) {
 		int t = server.getTickCount();
+		if (t % 5 == 0) Dominion.tick(server);
 		for (ServerPlayer p : server.getPlayerList().getPlayers()) {
 			if (!p.isAlive()) continue;
 			PlayerData d = data(p);
 			if (t % 4 == 0) magnet(p, d);
 			if (t % 10 == 0) hungerEfficiency(p, d);
 			if (t % 40 == 0) regen(p, d);
+			if (t % 10 == 0) secondWind(p, d, t);
 			if (t % 20 == 0) {
 				applyAll(p, d);
 				pollStats(p);
@@ -184,22 +186,45 @@ public final class SystemLogic {
 			double blocks = dCm / 100.0;
 			addExp(p, blocks * 0.02); // 0.02 EXP per block
 			QuestLogic.progress(p, QuestType.WALK, blocks);
+			rollSkill(p, Math.min(0.5, blocks * 0.0001), 0); // exploring can teach a skill
 		}
 		long fish = cur[1] - last[1];
 		if (fish > 0) {
 			addExp(p, fish * 12.0);
 			QuestLogic.progress(p, QuestType.FISH, fish);
-			rollSkill(p, Math.min(1.0, 0.03 * fish), 0.5);
+			rollSkill(p, Math.min(1.0, 0.04 * fish), 0.5);   // fishing
 		}
 		long bred = cur[2] - last[2];
 		if (bred > 0) {
 			addExp(p, bred * 8.0);
 			QuestLogic.progress(p, QuestType.BREED, bred);
+			rollSkill(p, Math.min(1.0, 0.03 * bred), 0);    // farming / ranching
 		}
 		long trade = cur[3] - last[3];
-		if (trade > 0) addExp(p, trade * 10.0);
+		if (trade > 0) {
+			addExp(p, trade * 10.0);
+			QuestLogic.progress(p, QuestType.TRADE, trade);
+			rollSkill(p, Math.min(1.0, 0.04 * trade), 0.5);
+		}
 		long ench = cur[4] - last[4];
-		if (ench > 0) addExp(p, ench * 20.0);
+		if (ench > 0) {
+			addExp(p, ench * 20.0);
+			QuestLogic.progress(p, QuestType.ENCHANT, ench);
+			rollSkill(p, Math.min(1.0, 0.1 * ench), 1.0);
+		}
+	}
+
+	private static final Map<UUID, Integer> SECOND_WIND_READY = new HashMap<>();
+
+	/** Epic skill: when health drops under 25% you get a burst of regeneration (cooldown). */
+	private static void secondWind(ServerPlayer p, PlayerData d, int tick) {
+		int rank = d.rank(PassiveSkill.SECOND_WIND);
+		if (rank <= 0 || p.getHealth() >= p.getMaxHealth() * 0.25f) return;
+		Integer ready = SECOND_WIND_READY.get(p.getUUID());
+		if (ready != null && tick < ready) return;
+		SECOND_WIND_READY.put(p.getUUID(), tick + (60 - 15 * rank) * 20);
+		p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 120, 1 + rank, false, true, true));
+		msg(p, "SECOND WIND!", ChatFormatting.GREEN);
 	}
 
 	private static void regen(ServerPlayer p, PlayerData d) {
@@ -247,11 +272,11 @@ public final class SystemLogic {
 
 		// ---- STRENGTH
 		mod(p, Attributes.ATTACK_DAMAGE, "attack", 0.3 * str + 0.5 * d.rank(PassiveSkill.HUNTERS_INSTINCT) + 1.0 * d.rank(PassiveSkill.BERSERKER), Operation.ADD_VALUE);
-		mod(p, Attributes.BLOCK_BREAK_SPEED, "break_speed", d.has(Stat.STRENGTH, 1) ? Math.min(1.0, 0.15 + 0.01 * (str - 20)) : 0, Operation.ADD_MULTIPLIED_BASE);
+		mod(p, Attributes.BLOCK_BREAK_SPEED, "break_speed", (d.has(Stat.STRENGTH, 1) ? Math.min(1.0, 0.15 + 0.01 * (str - 20)) : 0) + 0.25 * d.rank(PassiveSkill.WORLD_BREAKER), Operation.ADD_MULTIPLIED_BASE);
 		mod(p, Attributes.KNOCKBACK_RESISTANCE, "kb_resist", d.has(Stat.STRENGTH, 2) ? Math.min(0.9, 0.1 + 0.01 * (str - 45)) : 0, Operation.ADD_VALUE);
 
 		// ---- AGILITY
-		mod(p, Attributes.MOVEMENT_SPEED, "speed", 0.004 * agi + 0.05 * d.rank(PassiveSkill.SWIFT_STEP) + 0.08 * d.rank(PassiveSkill.WINDWALKER), Operation.ADD_MULTIPLIED_BASE);
+		mod(p, Attributes.MOVEMENT_SPEED, "speed", 0.004 * agi + 0.05 * d.rank(PassiveSkill.SWIFT_STEP) + 0.08 * d.rank(PassiveSkill.WINDWALKER) + 0.15 * d.rank(PassiveSkill.SHADOW_HASTE), Operation.ADD_MULTIPLIED_BASE);
 		double jump = d.has(Stat.AGILITY, 1) ? Math.min(0.25, 0.03 + 0.0035 * (agi - 15)) : 0;
 		mod(p, Attributes.JUMP_STRENGTH, "jump", jump + 0.08 * d.rank(PassiveSkill.SPRINGS), Operation.ADD_VALUE);
 		double fall = d.has(Stat.AGILITY, 3) ? Math.min(0.8, 0.2 + 0.01 * (agi - 60)) : 0;
@@ -272,8 +297,8 @@ public final class SystemLogic {
 		mod(p, Attributes.BLOCK_INTERACTION_RANGE, "block_reach", 2.0 * sov, Operation.ADD_VALUE);
 		mod(p, Attributes.ENTITY_INTERACTION_RANGE, "entity_reach", 1.5 * sov, Operation.ADD_VALUE);
 		mod(p, Attributes.STEP_HEIGHT, "step", 0.4 * d.rank(PassiveSkill.LIGHT_FEET), Operation.ADD_VALUE);
-		mod(p, Attributes.MINING_EFFICIENCY, "mining", 1.0 * d.rank(PassiveSkill.MINERS_HANDS) + 0.5 * d.rank(PassiveSkill.QUICK_HANDS), Operation.ADD_VALUE);
-		mod(p, Attributes.ATTACK_SPEED, "atkspeed", 0, Operation.ADD_MULTIPLIED_BASE); // removed from old versions
+		mod(p, Attributes.MINING_EFFICIENCY, "mining", 1.0 * d.rank(PassiveSkill.MINERS_HANDS) + 0.5 * d.rank(PassiveSkill.QUICK_HANDS) + 2.0 * d.rank(PassiveSkill.WORLD_BREAKER), Operation.ADD_VALUE);
+		mod(p, Attributes.ATTACK_SPEED, "atkspeed", 0.10 * d.rank(PassiveSkill.SHADOW_HASTE), Operation.ADD_MULTIPLIED_BASE);
 
 		if (d.rank(PassiveSkill.CAT_EYES) > 0)
 			p.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, true, false, false));

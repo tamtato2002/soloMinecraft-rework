@@ -9,7 +9,12 @@ public enum QuestType {
 	SMELT("smelt", "Smelt / cook items", 12),
 	WALK("walk", "Travel on foot (blocks)", 300),
 	FISH("fish", "Catch fish", 3),
-	BREED("breed", "Breed animals", 2);
+	BREED("breed", "Breed animals", 2),
+	STONE("stone", "Mine stone", 64),
+	HARVEST("harvest", "Harvest crops", 24),
+	TRADE("trade", "Trade with villagers", 3),
+	ENCHANT("enchant", "Enchant items", 2),
+	HUNT("hunt", "Hunt animals", 6);
 
 	public final String id, label;
 	public final int base;

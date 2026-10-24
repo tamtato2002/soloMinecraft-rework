@@ -7,7 +7,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -89,8 +91,42 @@ public final class QuestLogic {
 		if (d.quests.isEmpty() || now >= d.questExpiry || d.questExpiry - now > DAY_TICKS) generate(p, d, now);
 	}
 
+	private static List<List<Reward>> modded;
+
+	/** Find items added by other mods and sort them into tiers by durability / item rarity. Done once, lazily. */
+	private static void scanModded() {
+		if (modded != null) return;
+		modded = new ArrayList<>();
+		for (int i = 0; i < 5; i++) modded.add(new ArrayList<>());
+		try {
+			for (Item it : BuiltInRegistries.ITEM) {
+				if (it == Items.AIR) continue;
+				String id = ItemIds.idOf(it);
+				if (id.startsWith("minecraft:") || id.startsWith("solosystem:")) continue;
+				ItemStack st = new ItemStack(it, 1);
+				int max = st.getMaxDamage();
+				int cat = LootLogic.categoryOf(it);
+				int natural;
+				if (cat >= 0 && max > 0) {
+					natural = max < 300 ? 1 : max < 900 ? 2 : max < 2000 ? 3 : 4; // modded weapons / armor / tools
+				} else {
+					int rar = st.getRarity().ordinal(); // COMMON, UNCOMMON, RARE, EPIC
+					if (rar <= 0) continue;               // skip plain items (blocks, junk)
+					natural = rar == 1 ? 1 : rar == 2 ? 2 : 3;
+				}
+				for (int t = natural; t <= Math.min(4, natural + 1); t++)
+					modded.get(t).add(new Reward(id, 1, (cat >= 0 && max > 0) ? 1 : 2));
+			}
+		} catch (Exception ignored) {}
+	}
+
 	private static List<Reward> pool(int tier, ThreadLocalRandom rnd) {
 		List<Reward> pool = new ArrayList<>(List.of(BUILTIN[tier]));
+		if (SoloConfig.get().autoModItems) {
+			scanModded();
+			List<Reward> m = modded.get(tier);
+			for (int i = 0; i < 2 && !m.isEmpty(); i++) pool.add(m.get(rnd.nextInt(m.size())));
+		}
 		String[] extra = SoloConfig.get().extraQuestRewards[tier];
 		if (extra != null) {
 			for (String e : extra) {
@@ -118,11 +154,22 @@ public final class QuestLogic {
 		List<QuestType> types = new ArrayList<>(List.of(QuestType.values()));
 		Collections.shuffle(types);
 		int count = Math.max(1, Math.min(types.size(), cfg.questsPerDay));
+		// variety: avoid the types used yesterday when there are enough others
+		List<QuestType> fresh = new ArrayList<>();
+		for (QuestType t : types) if (!d.lastQuestTypes.contains(t.id)) fresh.add(t);
+		if (fresh.size() >= count) types = fresh;
+		List<String> used = new ArrayList<>();
+		int[] tierUse = new int[5];
 		for (int i = 0; i < count; i++) {
 			QuestType t = types.get(i);
+			used.add(t.id);
 			int tier = rollTier(rnd);
-			int target = Math.max(1, (int) Math.round(t.base * MULT[tier]));
+			for (int tries = 0; tries < 4 && tierUse[tier] >= 1 + (i / 2); tries++) tier = rollTier(rnd); // spread the tiers
+			tierUse[tier]++;
+			double jitter = 0.85 + rnd.nextDouble() * 0.35;
+			int target = Math.max(1, (int) Math.round(t.base * MULT[tier] * jitter));
 
+			// random reward, rolled now and fixed for this quest
 			int exp = (int) Math.round(EXP_BASE[tier] * (0.7 + rnd.nextDouble() * 0.8) * cfg.questExpMultiplier);
 			int pts = PTS_MIN[tier] + rnd.nextInt(PTS_MAX[tier] - PTS_MIN[tier] + 1);
 			double sk = SK_MIN[tier] + rnd.nextDouble() * (SK_MAX[tier] - SK_MIN[tier]);
@@ -134,11 +181,13 @@ public final class QuestLogic {
 			List<String> codes = new ArrayList<>();
 			for (int k = 0; k < n; k++) {
 				Reward rw = pool.get(k);
-				int amount = rw.min() + rnd.nextInt(rw.max() - rw.min() + 1);
+				int amount = rw.min() + rnd.nextInt(Math.max(1, rw.max() - rw.min() + 1));
 				codes.add(rw.id() + "|" + amount);
 			}
 			d.quests.add(new Quest(t.id, tier, target, 0, false, exp, pts, sk, codes));
 		}
+		d.lastQuestTypes.clear();
+		d.lastQuestTypes.addAll(used);
 		SystemLogic.msg(p, reset ? "A new day begins. Daily quests have reset!" : "[Daily Quest] has arrived!", ChatFormatting.YELLOW);
 		SystemLogic.sync(p);
 	}
@@ -181,7 +230,11 @@ public final class QuestLogic {
 		d.points += q.rewardPoints;
 		SystemLogic.addExpRaw(p, q.rewardExp);
 		SystemLogic.rollSkill(p, q.skillChance, SK_BOOST[t]);
-		for (ItemStack s : itemStacks(q)) give(p, s);
+		for (ItemStack s : itemStacks(q)) {
+			int cat = LootLogic.categoryOf(s.getItem());
+			if (cat >= 0 && s.getMaxDamage() > 0) LootLogic.enchant(p.level(), s, cat, t, ThreadLocalRandom.current()); // gear rewards come enchanted
+			give(p, s);
+		}
 		SystemLogic.msg(p, rewardLine2(q), ChatFormatting.GREEN);
 		SystemLogic.sync(p);
 	}

@@ -16,7 +16,9 @@ public class PlayerData {
 		Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("skills", Map.of()).forGetter(d -> d.skills),
 		Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("resist", Map.of()).forGetter(d -> d.resist),
 		Codec.LONG.optionalFieldOf("questExpiry", 0L).forGetter(d -> d.questExpiry),
-		Quest.CODEC.listOf().optionalFieldOf("quests", List.of()).forGetter(d -> d.quests)
+		Quest.CODEC.listOf().optionalFieldOf("quests", List.of()).forGetter(d -> d.quests),
+		Codec.STRING.listOf().optionalFieldOf("lastQuestTypes", List.of()).forGetter(d -> d.lastQuestTypes),
+		Codec.LONG.optionalFieldOf("domReady", 0L).forGetter(d -> d.domReady)
 	).apply(i, PlayerData::new));
 
 	public int level = 1;
@@ -29,16 +31,23 @@ public class PlayerData {
 	/** game tick (overworld game time) when the current daily quests expire */
 	public long questExpiry = 0;
 	public final List<Quest> quests = new ArrayList<>();
+	/** quest types used in the previous set (so the next day is different) */
+	public final List<String> lastQuestTypes = new ArrayList<>();
+	/** game tick when the Dominion ability is ready again */
+	public long domReady = 0;
 
 	public PlayerData() {}
 
 	public PlayerData(int level, double exp, int points, Map<String, Integer> stats, Map<String, Integer> skills,
-					  Map<String, Integer> resist, long questExpiry, List<Quest> quests) {
+					  Map<String, Integer> resist, long questExpiry, List<Quest> quests,
+					  List<String> lastQuestTypes, long domReady) {
 		this.level = level; this.exp = exp; this.points = points;
 		this.stats.putAll(stats); this.skills.putAll(skills); this.resist.putAll(resist);
 		migrateStatIds(this.stats);
 		this.questExpiry = questExpiry;
 		for (Quest q : quests) this.quests.add(q.copy());
+		this.lastQuestTypes.addAll(lastQuestTypes);
+		this.domReady = domReady;
 	}
 
 	/** Old saves used str/agi/vit/int/per. */
@@ -60,5 +69,5 @@ public class PlayerData {
 	public static double expToNext(int level) { return 40 + 18.0 * level + 4.0 * level * level; }
 	public double expToNext() { return expToNext(level); }
 
-	public PlayerData copy() { return new PlayerData(level, exp, points, stats, skills, resist, questExpiry, quests); }
+	public PlayerData copy() { return new PlayerData(level, exp, points, stats, skills, resist, questExpiry, quests, lastQuestTypes, domReady); }
 }
