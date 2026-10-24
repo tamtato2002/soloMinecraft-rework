@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "solosystem",
+  "version": "${version}",
+  "name": "Solo System",
+  "description": "Solo Leveling style System: separate EXP/Level, stat points and random Passive Skills.",
+  "authors": ["You"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.example.solosystem.SoloSystemMod"],
+    "client": ["com.example.solosystem.client.SoloSystemClient"]
+  },
+  "mixins": ["solosystem.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
