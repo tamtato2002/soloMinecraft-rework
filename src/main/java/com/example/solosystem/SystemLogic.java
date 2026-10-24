@@ -25,6 +25,7 @@ public final class SystemLogic {
 	private static final Set<UUID> DIRTY = new HashSet<>();
 	private static final Map<UUID, long[]> LAST = new HashMap<>();
 	private static final Map<UUID, Integer> LAST_FOOD = new HashMap<>();
+	private static final Map<UUID, Integer> LAST_XP = new HashMap<>();
 
 	private SystemLogic() {}
 
@@ -43,6 +44,7 @@ public final class SystemLogic {
 	public static void onLeave(ServerPlayer p) {
 		LAST.remove(p.getUUID());
 		LAST_FOOD.remove(p.getUUID());
+		LAST_XP.remove(p.getUUID());
 		DIRTY.remove(p.getUUID());
 	}
 
@@ -82,12 +84,35 @@ public final class SystemLogic {
 	}
 
 	public static void allocate(ServerPlayer p, String statId, int amount) {
-		Stat s = Stat.byId(statId);
+		boolean test = SoloConfig.get().testMode;
 		PlayerData d = data(p);
-		if (s == null || d.points <= 0) return;
-		int n = Math.max(1, Math.min(amount, Math.min(100, d.points)));
+
+		if ("__reset".equals(statId)) {            // test mode: wipe all stat points
+			if (!test) return;
+			d.stats.clear();
+			applyAll(p, d);
+			sync(p);
+			msg(p, "[TEST MODE] All stats reset.", ChatFormatting.RED);
+			return;
+		}
+
+		Stat s = Stat.byId(statId);
+		if (s == null) return;
+
+		if (amount < 0) {                           // test mode: take points back out
+			if (!test) return;
+			int take = Math.min(Math.min(100, -amount), d.stat(s));
+			if (take <= 0) return;
+			d.stats.merge(s.id(), -take, Integer::sum);
+			applyAll(p, d);
+			sync(p);
+			return;
+		}
+
+		if (!test && d.points <= 0) return;
+		int n = test ? Math.max(1, Math.min(amount, 100)) : Math.max(1, Math.min(amount, Math.min(100, d.points)));
 		int before = d.stat(s);
-		d.points -= n;
+		if (!test) d.points -= n;                   // test mode = unlimited points
 		d.stats.merge(s.id(), n, Integer::sum);
 		int after = d.stat(s);
 		for (Ability a : s.abilities) {
@@ -150,6 +175,7 @@ public final class SystemLogic {
 		for (ServerPlayer p : server.getPlayerList().getPlayers()) {
 			if (!p.isAlive()) continue;
 			PlayerData d = data(p);
+			orbs(p);
 			if (t % 4 == 0) magnet(p, d);
 			if (t % 10 == 0) hungerEfficiency(p, d);
 			if (t % 40 == 0) regen(p, d);
@@ -212,6 +238,13 @@ public final class SystemLogic {
 			QuestLogic.progress(p, QuestType.ENCHANT, ench);
 			rollSkill(p, Math.min(1.0, 0.1 * ench), 1.0);
 		}
+	}
+
+	/** Picking up Experience Orbs (vanilla or modded) also gives System EXP. */
+	private static void orbs(ServerPlayer p) {
+		int cur = p.totalExperience;
+		Integer last = LAST_XP.put(p.getUUID(), cur);
+		if (last != null && cur > last) addExp(p, (cur - last) * SoloConfig.get().orbExpFactor);
 	}
 
 	private static final Map<UUID, Integer> SECOND_WIND_READY = new HashMap<>();

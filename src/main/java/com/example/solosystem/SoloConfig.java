@@ -25,13 +25,16 @@ public final class SoloConfig {
 		public boolean enableMasterwork = true;
 		public boolean enableDominion = true;
 		public boolean enableReflect = true;
+		public boolean testMode = false;     // unlimited stat points (+ -1/-5/reset buttons) for testing builds
+		public double orbExpFactor = 0.5;    // System EXP per vanilla/modded XP point picked up
 		public boolean autoModItems = true; // quest rewards may include items from other mods automatically
 		public int resistMaxPercent = 75;
 
 		// ---- client / HUD
 		public boolean notifications = true;
 		public double toastSeconds = 2.0;
-		public boolean radar = true;
+		public boolean radar = true;          // Sixth Sense HUD
+		public boolean senseEsp = true;       // Sixth Sense in-world overlay (ore markers / enemy HP bars)
 		public int radarSize = 90;
 		public int radarCorner = 0; // 0 top-right, 1 top-left, 2 bottom-right, 3 bottom-left
 		public boolean menuPausesGame = false;
@@ -84,6 +87,7 @@ public final class SoloConfig {
 		d.resistMaxPercent = Math.max(5, Math.min(95, d.resistMaxPercent));
 		d.toastSeconds = Math.max(0.5, Math.min(10, d.toastSeconds));
 		d.radarSize = Math.max(50, Math.min(200, d.radarSize));
+		d.orbExpFactor = Math.max(0, Math.min(10, d.orbExpFactor));
 		d.radarCorner = Math.max(0, Math.min(3, d.radarCorner));
 		if (d.extraQuestRewards == null || d.extraQuestRewards.length < 5) d.extraQuestRewards = new String[][]{{}, {}, {}, {}, {}};
 		if (d.extraLoot == null || d.extraLoot.length < 5) d.extraLoot = new String[][]{{}, {}, {}, {}, {}};

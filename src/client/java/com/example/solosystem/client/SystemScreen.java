@@ -24,7 +24,7 @@ public class SystemScreen extends Screen {
 
 	private int tab = 0;
 	private int selStat = 0;
-	private int skillPage = 0;
+	private int skillTier = 4; // 0 COMMON .. 4 LEGENDARY
 	private int cfgPage = 0;
 
 	private record Label(Component text, int x, int y) {}
@@ -83,6 +83,7 @@ public class SystemScreen extends Screen {
 	// ------------------------------------------------------------------ STATUS
 
 	private void status(PlayerData d, int cx, int y) {
+		boolean test = SoloConfig.get().testMode;
 		int left = cx - 150;
 		label(Component.literal("LEVEL  " + d.level).withStyle(ChatFormatting.GOLD), left, y); y += 12;
 
@@ -90,22 +91,36 @@ public class SystemScreen extends Screen {
 		int filled = (int) (frac * 24);
 		String bar = "[" + "=".repeat(filled) + "-".repeat(24 - filled) + "]";
 		label(Component.literal("EXP " + bar + " " + (int) d.exp + "/" + (int) d.expToNext()).withStyle(ChatFormatting.AQUA), left, y); y += 12;
-		label(Component.literal("Available Points: " + d.points).withStyle(ChatFormatting.YELLOW), left, y); y += 14;
+
+		if (test) {
+			label(Component.literal("TEST MODE: unlimited stat points").withStyle(ChatFormatting.RED), left, y);
+			addRenderableWidget(Button.builder(Component.literal("Reset stats"), b -> ClientPlayNetworking.send(new AllocatePayload("__reset", 0)))
+				.bounds(left + 200, y - 3, 90, 14).build());
+		} else {
+			label(Component.literal("Available Points: " + d.points).withStyle(ChatFormatting.YELLOW), left, y);
+		}
+		y += 14;
 
 		Stat[] stats = Stat.values();
 		for (int i = 0; i < stats.length; i++) {
 			final int idx = i;
 			Stat s = stats[i];
 			pics.add(new Pic(STAT_ICONS[i], left, y + 2, 1));
-			Button sel = Button.builder(Component.literal((selStat == i ? "> " : "") + s.label + ": " + d.stat(s)), b -> { selStat = idx; rebuildWidgets(); })
-				.bounds(left + 20, y, 140, 20).build();
-			addRenderableWidget(sel);
-			Button b1 = Button.builder(Component.literal("+1"), b -> send(s, 1)).bounds(left + 166, y, 28, 20).build();
-			Button b5 = Button.builder(Component.literal("+5"), b -> send(s, 5)).bounds(left + 196, y, 28, 20).build();
-			b1.active = b5.active = d.points > 0;
+			addRenderableWidget(Button.builder(Component.literal((selStat == i ? "> " : "") + s.label + ": " + d.stat(s)), b -> { selStat = idx; rebuildWidgets(); })
+				.bounds(left + 20, y, 120, 20).build());
+
+			int bx = left + 144;
+			if (test) {
+				addRenderableWidget(Button.builder(Component.literal("-5"), b -> send(s, -5)).bounds(bx, y, 26, 20).build());
+				addRenderableWidget(Button.builder(Component.literal("-1"), b -> send(s, -1)).bounds(bx + 28, y, 26, 20).build());
+				bx += 56;
+			}
+			Button b1 = Button.builder(Component.literal("+1"), b -> send(s, 1)).bounds(bx, y, 26, 20).build();
+			Button b5 = Button.builder(Component.literal("+5"), b -> send(s, 5)).bounds(bx + 28, y, 26, 20).build();
+			b1.active = b5.active = test || d.points > 0;
 			addRenderableWidget(b1);
 			addRenderableWidget(b5);
-			label(Component.literal(s.blurb).withStyle(ChatFormatting.DARK_GRAY), left + 230, y + 6);
+			if (!test) label(Component.literal(s.blurb).withStyle(ChatFormatting.DARK_GRAY), bx + 60, y + 6);
 			y += 22;
 		}
 
@@ -130,41 +145,52 @@ public class SystemScreen extends Screen {
 
 	// ------------------------------------------------------------------ SKILLS
 
+	private static String trim(String t, int n) { return t.length() <= n ? t : t.substring(0, n - 2) + ".."; }
+
+	/** Skills are grouped by tier; pick a tier and its skills are listed in aligned columns. */
 	private void skills(PlayerData d, int cx, int y) {
-		int left = cx - 160;
+		int left = cx - 200;
 		PassiveSkill[] all = PassiveSkill.values();
 		int found = 0;
 		for (PassiveSkill s : all) if (d.rank(s) > 0) found++;
 		label(Component.literal("Passive Skills discovered: " + found + "/" + all.length).withStyle(ChatFormatting.YELLOW), left, y);
+		y += 14;
 
-		final int perPage = 14;
-		int pages = (all.length + perPage - 1) / perPage;
-		skillPage = Math.max(0, Math.min(pages - 1, skillPage));
-		Button prev = Button.builder(Component.literal("<"), b -> { skillPage--; rebuildWidgets(); }).bounds(cx + 90, y - 5, 20, 16).build();
-		Button next = Button.builder(Component.literal(">"), b -> { skillPage++; rebuildWidgets(); }).bounds(cx + 112, y - 5, 20, 16).build();
-		prev.active = skillPage > 0;
-		next.active = skillPage < pages - 1;
-		addRenderableWidget(prev);
-		addRenderableWidget(next);
-		label(Component.literal("Page " + (skillPage + 1) + "/" + pages).withStyle(ChatFormatting.GRAY), cx + 136, y);
-		y += 16;
+		// tier selector (highest first)
+		SkillRarity[] tiers = SkillRarity.values();
+		for (int k = tiers.length - 1; k >= 0; k--) {
+			final int tier = k;
+			int total = 0, own = 0;
+			for (PassiveSkill s : all) if (s.rarity == tiers[k]) { total++; if (d.rank(s) > 0) own++; }
+			String name = tiers[k].name() + " " + own + "/" + total;
+			Component text = Component.literal((skillTier == k ? "[" + name + "]" : name)).withStyle(tiers[k].color);
+			addRenderableWidget(Button.builder(text, b -> { skillTier = tier; rebuildWidgets(); })
+				.bounds(left + (tiers.length - 1 - k) * 80, y, 78, 18).build());
+		}
+		y += 24;
 
-		// rarest first
-		int shown = 0, idx = 0;
-		for (int i = all.length - 1; i >= 0; i--, idx++) {
-			if (idx < skillPage * perPage || shown >= perPage) continue;
-			PassiveSkill s = all[i];
+		// aligned table: SKILL | RANK | EFFECT
+		int colRank = left + 128, colDesc = left + 172;
+		label(Component.literal("SKILL").withStyle(ChatFormatting.DARK_GRAY), left, y);
+		label(Component.literal("RANK").withStyle(ChatFormatting.DARK_GRAY), colRank, y);
+		label(Component.literal("EFFECT").withStyle(ChatFormatting.DARK_GRAY), colDesc, y);
+		rects.add(new Rect(left, y + 10, left + 400, y + 11, 0x60FFFFFF));
+		y += 14;
+
+		SkillRarity tr = tiers[skillTier];
+		for (PassiveSkill s : all) {
+			if (s.rarity != tr) continue;
 			int rank = d.rank(s);
-			Component c;
 			if (rank > 0) {
-				c = Component.literal(s.displayName + " " + ROMAN[rank] + "/" + s.maxRank).withStyle(s.rarity.color)
-					.append(Component.literal("  " + s.desc).withStyle(ChatFormatting.GRAY));
+				label(Component.literal(s.displayName).withStyle(tr.color), left, y);
+				label(Component.literal(ROMAN[rank] + " / " + ROMAN[s.maxRank]).withStyle(rank >= s.maxRank ? ChatFormatting.GOLD : ChatFormatting.WHITE), colRank, y);
+				label(Component.literal(trim(s.desc, 40)).withStyle(ChatFormatting.GRAY), colDesc, y);
 			} else {
-				c = Component.literal("??? (" + s.rarity.name() + ")").withStyle(ChatFormatting.DARK_GRAY);
+				label(Component.literal("???").withStyle(ChatFormatting.DARK_GRAY), left, y);
+				label(Component.literal("- / " + ROMAN[s.maxRank]).withStyle(ChatFormatting.DARK_GRAY), colRank, y);
+				label(Component.literal("Not discovered yet").withStyle(ChatFormatting.DARK_GRAY), colDesc, y);
 			}
-			label(c, left, y);
 			y += 12;
-			shown++;
 		}
 	}
 
@@ -277,33 +303,38 @@ public class SystemScreen extends Screen {
 
 		if (cfgPage == 0) {
 			toggle(0, lx, y, "Notifications", () -> c.notifications, v -> c.notifications = v);
-			toggle(1, lx, y, "HUD Radar", () -> c.radar, v -> c.radar = v);
+			toggle(1, lx, y, "Sixth Sense HUD", () -> c.radar, v -> c.radar = v);
+			toggle(2, lx, y, "Sixth Sense overlay", () -> c.senseEsp, v -> c.senseEsp = v);
 			addRenderableWidget(Button.builder(Component.literal("Radar corner: " + CORNERS[c.radarCorner]), b -> {
 				c.radarCorner = (c.radarCorner + 1) % 4;
 				SoloConfig.save();
 				rebuildWidgets();
-			}).bounds(lx, y + 2 * 21, 180, 20).build());
-			toggle(3, lx, y, "Menu pauses game", () -> c.menuPausesGame, v -> c.menuPausesGame = v);
-			toggle(4, lx, y, "Dodge (MISS!)", () -> c.enableDodge, v -> c.enableDodge = v);
-			toggle(5, lx, y, "Critical hits", () -> c.enableCrit, v -> c.enableCrit = v);
+			}).bounds(lx, y + 3 * 21, 180, 20).build());
+			toggle(4, lx, y, "Menu pauses game", () -> c.menuPausesGame, v -> c.menuPausesGame = v);
+			toggle(5, lx, y, "Dodge (MISS!)", () -> c.enableDodge, v -> c.enableDodge = v);
+			toggle(6, lx, y, "Critical hits", () -> c.enableCrit, v -> c.enableCrit = v);
 
 			toggle(0, rx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
 			toggle(1, rx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);
 			toggle(2, rx, y, "Dominion (ally)", () -> c.enableDominion, v -> c.enableDominion = v);
 			toggle(3, rx, y, "Mirror Ward (reflect)", () -> c.enableReflect, v -> c.enableReflect = v);
 			toggle(4, rx, y, "Mod items in quests", () -> c.autoModItems, v -> c.autoModItems = v);
+			toggle(5, rx, y, "TEST MODE (inf. points)", () -> c.testMode, v -> c.testMode = v);
 		} else {
 			number(0, lx, y, "EXP rate", () -> c.expMultiplier, v -> c.expMultiplier = v, 0.25, 0.25, 10, "x%.2f");
 			number(1, lx, y, "Skill drop", () -> c.skillDropMultiplier, v -> c.skillDropMultiplier = v, 0.25, 0, 10, "x%.2f");
 			number(2, lx, y, "Loot drop", () -> c.lootMultiplier, v -> c.lootMultiplier = v, 0.25, 0, 10, "x%.2f");
 			number(3, lx, y, "Quest EXP", () -> c.questExpMultiplier, v -> c.questExpMultiplier = v, 0.25, 0.25, 10, "x%.2f");
+			number(4, lx, y, "XP orb -> EXP", () -> c.orbExpFactor, v -> c.orbExpFactor = v, 0.25, 0, 10, "x%.2f");
 
 			number(0, rx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, "%.0f");
 			number(1, rx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, "%.1f");
 			number(2, rx, y, "Radar size", () -> (double) c.radarSize, v -> c.radarSize = (int) Math.round(v), 10, 50, 200, "%.0f");
 			number(3, rx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, "%.0f");
 		}
-		label(Component.literal("Gameplay options apply on the server / host. Extra mod items: edit the JSON file.").withStyle(ChatFormatting.DARK_GRAY), lx, y + 6 * 21 + 6);
+		label(Component.literal(c.testMode ? "TEST MODE is ON: stats can be changed freely in the STATUS tab (host/server setting)."
+			: "Gameplay options apply on the server / host. Extra mod items: edit the JSON file.")
+			.withStyle(c.testMode ? ChatFormatting.RED : ChatFormatting.DARK_GRAY), lx, y + 7 * 21 + 6);
 	}
 
 	// ------------------------------------------------------------------ render

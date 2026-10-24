@@ -22,8 +22,8 @@ public enum Stat {
 		new Ability("Mirror Ward", "Reflects spells, poisons & effects back at the attacker", 60)}),
 	SENSE("sense", "Sense", "Crits, detection and awareness", new Ability[]{
 		new Ability("Critical Hit", "Crit chance and crit damage", 0),
-		new Ability("HUD Radar", "Radar shows monsters and rare ores", 20),
-		new Ability("Dungeon & Secret Perception", "Radar also shows chests, traps, spawners", 40),
+		new Ability("Sixth Sense", "Pickaxe: see all ores. Weapon: see enemies, names & HP", 20),
+		new Ability("Dungeon & Secret Perception", "Sixth Sense also reveals chests, traps, spawners", 40),
 		new Ability("Dodge Awareness", "Better chance to dodge arrows", 60)});
 
 	public final String id, label, blurb;

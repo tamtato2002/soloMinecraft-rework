@@ -31,7 +31,7 @@ public class SoloSystemClient implements ClientModInitializer {
 
 		HudElementRegistry.addLast(SoloSystemMod.id("quest_toasts"), (graphics, deltaTracker) -> QuestToasts.render(graphics));
 		HudElementRegistry.addLast(SoloSystemMod.id("popups"), (graphics, deltaTracker) -> Popups.render(graphics));
-		HudElementRegistry.addLast(SoloSystemMod.id("radar"), (graphics, deltaTracker) -> RadarHud.render(graphics));
+		HudElementRegistry.addLast(SoloSystemMod.id("radar"), (graphics, deltaTracker) -> SixthSense.render(graphics));
 		HudElementRegistry.addLast(SoloSystemMod.id("abilities"), (graphics, deltaTracker) -> AbilityHud.render(graphics));
 
 		KeyMapping.Category category = KeyMapping.Category.register(SoloSystemMod.id("main"));
@@ -41,7 +41,7 @@ public class SoloSystemClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
 			QuestToasts.tick();
 			Popups.tick();
-			RadarHud.tick(mc);
+			SixthSense.tick(mc);
 			while (open.consumeClick()) {
 				if (mc.gui.screen() == null && mc.player != null) mc.gui.setScreen(new SystemScreen());
 			}
