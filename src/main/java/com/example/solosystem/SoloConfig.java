@@ -42,6 +42,15 @@ public final class SoloConfig {
 		public boolean showOres = true;
 		public boolean showEnemies = true;
 		public boolean showSecrets = true;
+		public boolean showAnimals = true;   // green mode while holding feed / husbandry items
+		public boolean threatAlert = true;   // map turns red when a hostile is close
+		public int threatRange = 20;
+		/** speed (Agility) stretches the screen through the FOV effect: 0 = vanilla, 1 = reduced, 2 = off */
+		public int fovMode = 2;
+		public double savedFovEffect = -1;   // the player's own "FOV Effects" slider, restored when fovMode = 0
+		/** held item names (contains) that switch Sixth Sense to animal mode */
+		public String[] animalKeywords = {"wheat", "seeds", "carrot", "potato", "beetroot", "hay_block", "lead", "shears", "name_tag", "saddle",
+			"bone", "cod", "salmon", "berries", "kelp", "bamboo", "dandelion", "golden_apple", "slime_ball", "torchflower", "pitcher_pod", "milk_bucket"};
 		public int espRange = 36;       // max distance (blocks) for in-world ore markers / enemy HP bars
 		public int radarOpacity = 63;   // map background opacity in %
 
@@ -120,6 +129,9 @@ public final class SoloConfig {
 		d.abilityX = Math.max(0, Math.min(1000, d.abilityX)); d.abilityY = Math.max(0, Math.min(1000, d.abilityY));
 		d.radarOpacity = Math.max(10, Math.min(100, d.radarOpacity));
 		d.espRange = Math.max(8, Math.min(64, d.espRange));
+		d.threatRange = Math.max(6, Math.min(48, d.threatRange));
+		d.fovMode = Math.max(0, Math.min(2, d.fovMode));
+		if (d.animalKeywords == null) d.animalKeywords = new String[]{"wheat", "seeds", "carrot"};
 		if (d.oreColors == null) d.oreColors = new java.util.LinkedHashMap<>();
 		if (d.extraEnemies == null) d.extraEnemies = new String[0];
 		if (d.ignoredEnemies == null) d.ignoredEnemies = new String[0];

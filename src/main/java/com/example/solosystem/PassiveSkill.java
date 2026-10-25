@@ -40,7 +40,19 @@ public enum PassiveSkill {
 	UNDYING_WILL("undying_will", "Undying Will", "Survive a fatal blow (10 min cooldown)", SkillRarity.LEGENDARY, 1),
 	SHADOW_HASTE("shadow_haste", "Shadow Haste", "+15% move speed, +10% attack speed / rank", SkillRarity.LEGENDARY, 2),
 	WORLD_BREAKER("world_breaker", "World Breaker", "+25% break speed, +2 efficiency / rank", SkillRarity.LEGENDARY, 2),
-	SOVEREIGNS_FORTUNE("sovereigns_fortune", "Sovereign's Fortune", "+50% skill find chance / rank", SkillRarity.LEGENDARY, 2);
+	SOVEREIGNS_FORTUNE("sovereigns_fortune", "Sovereign's Fortune", "+50% skill find chance / rank", SkillRarity.LEGENDARY, 2),
+	// ---- Quality of Life: farming, fishing, animal husbandry, forestry
+	AUTO_REPLANT("auto_replant", "Auto-Replant", "Ripe crops replant (30% / rank)", SkillRarity.COMMON, 3),
+	BOUNTIFUL_CATCH("bountiful_catch", "Bountiful Catch", "Fishing: extra fish (15% / rank)", SkillRarity.COMMON, 3),
+	SHEPHERDS_REACH("shepherds_reach", "Shepherd's Reach", "+0.75 reach to animals / rank", SkillRarity.COMMON, 3),
+	HARVEST_BOUNTY("harvest_bounty", "Harvest Bounty", "Double crop drops (15% / rank)", SkillRarity.UNCOMMON, 3),
+	LUCKY_LINE("lucky_line", "Lucky Line", "Fishing: treasure (8% / rank)", SkillRarity.UNCOMMON, 3),
+	BREEDERS_BOUNTY("breeders_bounty", "Breeder's Bounty", "Breeding gives bonus XP (20% / rank)", SkillRarity.UNCOMMON, 3),
+	FORESTERS_FORTUNE("foresters_fortune", "Forester's Fortune", "Double log drops, saplings from leaves", SkillRarity.UNCOMMON, 3),
+	CARETAKERS_AURA("caretakers_aura", "Caretaker's Aura", "Nearby animals slowly heal", SkillRarity.UNCOMMON, 2),
+	DEEP_SEA_HAUL("deep_sea_haul", "Deep Sea Haul", "Fishing: emeralds, gold, diamonds", SkillRarity.RARE, 2),
+	TREE_FELLER("tree_feller", "Tree Feller", "Axe fells whole trees (sneak = 1 log)", SkillRarity.RARE, 2),
+	VERDANT_AURA("verdant_aura", "Verdant Aura", "Nearby crops grow faster", SkillRarity.RARE, 2);
 
 	public final String id, displayName, desc;
 	public final SkillRarity rarity;

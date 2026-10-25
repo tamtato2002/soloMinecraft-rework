@@ -45,6 +45,7 @@ public class SoloSystemClient implements ClientModInitializer {
 			QuestToasts.tick();
 			Popups.tick();
 			SixthSense.tick(mc);
+			FovGuard.tick(mc);
 			while (toggleSense.consumeClick()) {
 				SoloConfig.Data c = SoloConfig.get();
 				c.radar = !c.radar;

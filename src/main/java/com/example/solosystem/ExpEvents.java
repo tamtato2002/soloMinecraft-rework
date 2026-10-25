@@ -45,6 +45,7 @@ public final class ExpEvents {
 			if (stone) QuestLogic.progress(sp, QuestType.STONE, 1);
 			if (state.is(CROPS)) QuestLogic.progress(sp, QuestType.HARVEST, 1);
 			blockSkillRoll(sp, state, stone);
+			QolSkills.onBlockBroken(sp, level, pos, state, be);
 		});
 
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {

@@ -20,7 +20,10 @@ public class SystemScreen extends Screen {
 	private static final String[] TABS = {"STATUS", "SKILLS", "QUESTS", "RESISTANCE", "CONFIG"};
 	private static final int[] TAB_ICONS = {Icons.STATUS, Icons.SKILLS, Icons.QUESTS, Icons.RESISTANCE, Icons.CONFIG};
 	private static final int[] STAT_ICONS = {Icons.STRENGTH, Icons.AGILITY, Icons.ENDURANCE, Icons.INTELLIGENCE, Icons.SENSE};
-	private static final String[] CFG_PAGES = {"General", "Numbers", "Sixth Sense", "Colors", "HUD layout"};
+	private static final String[] CFG_PAGES = {"Presets", "Rates", "General", "Sixth Sense", "Colors", "HUD layout"};
+	private static final String[] FOV_MODES = {"Vanilla", "Reduced", "Off"};
+	private static final ChatFormatting[] PRESET_COLORS = {ChatFormatting.AQUA, ChatFormatting.GREEN, ChatFormatting.DARK_GREEN,
+		ChatFormatting.YELLOW, ChatFormatting.GOLD, ChatFormatting.RED, ChatFormatting.LIGHT_PURPLE};
 
 	private int tab = 0;
 	private int selStat = 0;
@@ -317,25 +320,96 @@ public class SystemScreen extends Screen {
 		addRenderableWidget(Button.builder(Component.literal("Reset"), b -> { pos[0] = defX; pos[1] = defY; save.run(); }).bounds(bx + 98, y, 50, 20).build());
 	}
 
+	/** A rate setting with a coloured bar: blue = harder than default, green = default, yellow..red = cheating. */
+	private void rateRow(int row, int cx, int top, String name, Supplier<Double> get, Consumer<Double> set,
+						 double step, double min, double max, double def, String fmt) {
+		int y = top + row * 22, x = cx - 170;
+		double v = get.get();
+		label(Component.literal(name).withStyle(ChatFormatting.WHITE), x, y + 6);
+		Button minus = Button.builder(Component.literal("-"), b -> {
+			set.accept(Math.max(min, Math.round((get.get() - step) * 100) / 100.0));
+			SoloConfig.save();
+			rebuildWidgets();
+		}).bounds(x + 110, y, 20, 20).build();
+		int bx = x + 134, bw = 110;
+		rects.add(new Rect(bx - 1, y + 4, bx + bw + 1, y + 16, 0xFF000000));
+		rects.add(new Rect(bx, y + 5, bx + bw, y + 15, 0xFF202030));
+		double frac = max > min ? (v - min) / (max - min) : 0;
+		int fw = (int) Math.round(bw * Math.max(0, Math.min(1, frac)));
+		double ratio = def > 0 ? v / def : 1;
+		int color = v <= 0 ? 0xFF555555 : ratio < 0.9 ? 0xFF4F9BFF : ratio <= 1.1 ? 0xFF4CD964 : ratio <= 2.5 ? 0xFFFFD93D : ratio <= 5 ? 0xFFFF9A3C : 0xFFFF3030;
+		if (fw > 0) rects.add(new Rect(bx, y + 5, bx + fw, y + 15, color));
+		int dx = bx + (int) Math.round(bw * (def - min) / (max - min));
+		rects.add(new Rect(dx, y + 3, dx + 1, y + 17, 0xFFFFFFFF)); // default marker
+		Button plus = Button.builder(Component.literal("+"), b -> {
+			set.accept(Math.min(max, Math.round((get.get() + step) * 100) / 100.0));
+			SoloConfig.save();
+			rebuildWidgets();
+		}).bounds(bx + bw + 4, y, 20, 20).build();
+		minus.active = v > min + 1e-9;
+		plus.active = v < max - 1e-9;
+		addRenderableWidget(minus);
+		addRenderableWidget(plus);
+		label(Component.literal(String.format(fmt, v)).withStyle(ChatFormatting.YELLOW), bx + bw + 28, y + 6);
+	}
+
 	private void config(int cx, int y) {
 		SoloConfig.Data c = SoloConfig.get();
 		int lx = cx - 190, rx = cx + 10;
 		pics.add(new Pic(Icons.CONFIG, lx, y - 3, 1));
-		label(Component.literal("CONFIG").withStyle(ChatFormatting.GOLD)
-			.append(Component.literal("  config/solosystem.json").withStyle(ChatFormatting.GRAY)), lx + 20, y);
-		addRenderableWidget(Button.builder(Component.literal("Page " + (cfgPage + 1) + "/" + CFG_PAGES.length + ": " + CFG_PAGES[cfgPage] + "  >"), b -> {
-			cfgPage = (cfgPage + 1) % CFG_PAGES.length;
-			rebuildWidgets();
-		}).bounds(cx + 40, y - 5, 150, 16).build());
+		label(Component.literal("CONFIG").withStyle(ChatFormatting.GOLD), lx + 20, y);
+		int n = CFG_PAGES.length;
+		addRenderableWidget(Button.builder(Component.literal("<"), b -> { cfgPage = (cfgPage + n - 1) % n; rebuildWidgets(); }).bounds(cx - 10, y - 5, 20, 16).build());
+		addRenderableWidget(Button.builder(Component.literal("Page " + (cfgPage + 1) + "/" + n + ": " + CFG_PAGES[cfgPage]), b -> { cfgPage = (cfgPage + 1) % n; rebuildWidgets(); })
+			.bounds(cx + 12, y - 5, 140, 16).build());
+		addRenderableWidget(Button.builder(Component.literal(">"), b -> { cfgPage = (cfgPage + 1) % n; rebuildWidgets(); }).bounds(cx + 154, y - 5, 20, 16).build());
 		y += 18;
 
-		String footer = "Gameplay options apply on the server / host.";
+		String footer = "Gameplay options apply on the server / host. Saved to config/solosystem.json.";
+		int footY;
 		switch (cfgPage) {
-			case 0 -> {
+			case 0 -> { // ---------------- PRESETS
+				int cur = Presets.current();
+				label(Component.literal("One click sets EXP, skill drops, loot, quest EXP, XP orbs, quests/day and resist cap.").withStyle(ChatFormatting.GRAY), lx, y);
+				y += 14;
+				for (int i = 0; i < Presets.ALL.length; i++) {
+					final Presets.Preset p = Presets.ALL[i];
+					addRenderableWidget(Button.builder(Component.literal((cur == i ? "> " : "") + p.name()).withStyle(PRESET_COLORS[i]), b -> {
+						Presets.apply(p);
+						rebuildWidgets();
+					}).bounds(lx, y + i * 22, 150, 20).build());
+					label(Component.literal(String.format("EXP x%.2g  Skills x%.2g  Loot x%.2g", p.exp(), p.skill(), p.loot())).withStyle(ChatFormatting.WHITE), lx + 158, y + i * 22 + 2);
+					label(Component.literal(p.blurb()).withStyle(ChatFormatting.DARK_GRAY), lx + 158, y + i * 22 + 11);
+				}
+				footer = cur >= 0 ? "Current preset: " + Presets.ALL[cur].name() + "  (fine-tune it in the Rates page)"
+					: "Current settings: Custom (edited in the Rates page). Pick a preset to reset them.";
+				footY = y + Presets.ALL.length * 22 + 6;
+			}
+			case 1 -> { // ---------------- RATES
+				int cur = Presets.current();
+				label(Component.literal("Preset: " + (cur >= 0 ? Presets.ALL[cur].name() : "Custom")).withStyle(cur >= 0 ? PRESET_COLORS[cur] : ChatFormatting.WHITE), lx, y);
+				label(Component.literal("white tick = default").withStyle(ChatFormatting.DARK_GRAY), cx + 40, y);
+				y += 12;
+				rateRow(0, cx, y, "EXP rate", () -> c.expMultiplier, v -> c.expMultiplier = v, 0.25, 0.25, 10, 1.0, "x%.2f");
+				rateRow(1, cx, y, "Skill drops", () -> c.skillDropMultiplier, v -> c.skillDropMultiplier = v, 0.25, 0, 10, 1.0, "x%.2f");
+				rateRow(2, cx, y, "Loot drops", () -> c.lootMultiplier, v -> c.lootMultiplier = v, 0.25, 0, 10, 1.0, "x%.2f");
+				rateRow(3, cx, y, "Quest EXP", () -> c.questExpMultiplier, v -> c.questExpMultiplier = v, 0.25, 0.25, 10, 1.0, "x%.2f");
+				rateRow(4, cx, y, "XP orb -> EXP", () -> c.orbExpFactor, v -> c.orbExpFactor = v, 0.25, 0, 10, 0.5, "x%.2f");
+				rateRow(5, cx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, 3, "%.0f");
+				rateRow(6, cx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, 75, "%.0f");
+				rateRow(7, cx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, 2, "%.1f");
+				footY = y + 8 * 22 + 6;
+			}
+			case 2 -> { // ---------------- GENERAL
 				toggle(0, lx, y, "Notifications", () -> c.notifications, v -> c.notifications = v);
 				toggle(1, lx, y, "Menu pauses game", () -> c.menuPausesGame, v -> c.menuPausesGame = v);
 				toggle(2, lx, y, "Dodge (MISS!)", () -> c.enableDodge, v -> c.enableDodge = v);
 				toggle(3, lx, y, "Critical hits", () -> c.enableCrit, v -> c.enableCrit = v);
+				addRenderableWidget(Button.builder(Component.literal("Speed FOV stretch: " + FOV_MODES[c.fovMode]), b -> {
+					c.fovMode = c.fovMode == 2 ? 1 : c.fovMode == 1 ? 0 : 2; // Off -> Reduced -> Vanilla -> Off
+					SoloConfig.save();
+					rebuildWidgets();
+				}).bounds(lx, y + 4 * 21, 180, 20).build());
 
 				toggle(0, rx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
 				toggle(1, rx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);
@@ -343,32 +417,27 @@ public class SystemScreen extends Screen {
 				toggle(3, rx, y, "Mirror Ward (reflect)", () -> c.enableReflect, v -> c.enableReflect = v);
 				toggle(4, rx, y, "Mod items in quests", () -> c.autoModItems, v -> c.autoModItems = v);
 				toggle(5, rx, y, "TEST MODE (inf. points)", () -> c.testMode, v -> c.testMode = v);
-				if (c.testMode) footer = "TEST MODE is ON: change stats freely in the STATUS tab (host/server setting).";
+				footer = c.testMode ? "TEST MODE is ON: change stats freely in the STATUS tab (host/server setting)."
+					: "Speed FOV stretch: 'Off' stops the screen widening when Agility makes you fast (uses the FOV Effects slider).";
+				footY = y + 7 * 21 + 6;
 			}
-			case 1 -> {
-				number(0, lx, y, "EXP rate", () -> c.expMultiplier, v -> c.expMultiplier = v, 0.25, 0.25, 10, "x%.2f");
-				number(1, lx, y, "Skill drop", () -> c.skillDropMultiplier, v -> c.skillDropMultiplier = v, 0.25, 0, 10, "x%.2f");
-				number(2, lx, y, "Loot drop", () -> c.lootMultiplier, v -> c.lootMultiplier = v, 0.25, 0, 10, "x%.2f");
-				number(3, lx, y, "Quest EXP", () -> c.questExpMultiplier, v -> c.questExpMultiplier = v, 0.25, 0.25, 10, "x%.2f");
-				number(4, lx, y, "XP orb -> EXP", () -> c.orbExpFactor, v -> c.orbExpFactor = v, 0.25, 0, 10, "x%.2f");
-
-				number(0, rx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, "%.0f");
-				number(1, rx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, "%.1f");
-				number(2, rx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, "%.0f");
-			}
-			case 2 -> {
+			case 3 -> { // ---------------- SIXTH SENSE
 				toggle(0, lx, y, "Sixth Sense HUD (key V)", () -> c.radar, v -> c.radar = v);
 				toggle(1, lx, y, "World overlay", () -> c.senseEsp, v -> c.senseEsp = v);
 				toggle(2, lx, y, "Show ores (pickaxe)", () -> c.showOres, v -> c.showOres = v);
-				toggle(3, lx, y, "Show enemies", () -> c.showEnemies, v -> c.showEnemies = v);
-				toggle(4, lx, y, "Show chests / traps", () -> c.showSecrets, v -> c.showSecrets = v);
+				toggle(3, lx, y, "Show enemies (weapon)", () -> c.showEnemies, v -> c.showEnemies = v);
+				toggle(4, lx, y, "Show animals (feed/tools)", () -> c.showAnimals, v -> c.showAnimals = v);
+				toggle(5, lx, y, "Show chests / traps", () -> c.showSecrets, v -> c.showSecrets = v);
+				toggle(6, lx, y, "Threat alert (red map)", () -> c.threatAlert, v -> c.threatAlert = v);
 
 				number(0, rx, y, "Map size", () -> (double) c.radarSize, v -> c.radarSize = (int) Math.round(v), 10, 50, 200, "%.0f");
 				number(1, rx, y, "Map opacity %", () -> (double) c.radarOpacity, v -> c.radarOpacity = (int) Math.round(v), 10, 10, 100, "%.0f");
 				number(2, rx, y, "Overlay range", () -> (double) c.espRange, v -> c.espRange = (int) Math.round(v), 4, 8, 64, "%.0f");
-				footer = "Other mods: ores (c:ores tags / *_ore) and monsters are detected automatically. More in the JSON file.";
+				number(3, rx, y, "Threat range", () -> (double) c.threatRange, v -> c.threatRange = (int) Math.round(v), 2, 6, 48, "%.0f");
+				footer = "Green = animal items, yellow = pickaxe, orange = weapon, RED = enemy close. Other mods: see the JSON file.";
+				footY = y + 7 * 21 + 6;
 			}
-			case 3 -> {
+			case 4 -> { // ---------------- COLORS
 				label(Component.literal("Click a colour to cycle it:").withStyle(ChatFormatting.GRAY), lx, y + 3);
 				addRenderableWidget(Button.builder(Component.literal("Reset all colours"), b -> {
 					c.oreColors.clear();
@@ -380,7 +449,6 @@ public class SystemScreen extends Screen {
 					int row = 1 + (i % 6), x = i < 6 ? lx : rx;
 					colorRow(row, x, y, types[i].label, types[i].name(), types[i].color & 0xFFFFFF);
 				}
-				// ores from other mods that Sixth Sense has seen
 				List<String[]> modded = SixthSense.moddedOres();
 				label(Component.literal(modded.isEmpty() ? "No modded ores seen yet (hold a pickaxe near some)."
 					: "Detected ores from other mods:").withStyle(ChatFormatting.GRAY), lx, y + 7 * 21 + 5);
@@ -389,8 +457,9 @@ public class SystemScreen extends Screen {
 					colorRow(8, i == 0 ? lx : rx, y, m[1], m[0], OreColors.auto(m[0]));
 				}
 				footer = "Custom ore colours: \"modid:block\" or \"#modid:tag\" -> \"#RRGGBB\" in oreColors (JSON).";
+				footY = y + 9 * 21 + 6;
 			}
-			default -> {
+			default -> { // ---------------- HUD LAYOUT
 				addRenderableWidget(Button.builder(Component.literal("Move step: " + (hudStep / 10.0) + "%  (click to change)"), b -> {
 					hudStep = hudStep == 10 ? 25 : hudStep == 25 ? 50 : hudStep == 50 ? 100 : 10;
 					rebuildWidgets();
@@ -402,11 +471,10 @@ public class SystemScreen extends Screen {
 				moveRow(1, lx, y, "Quest notifications", toast, 0, 0, () -> { c.toastX = toast[0]; c.toastY = toast[1]; save.run(); rebuildWidgets(); });
 				moveRow(2, lx, y, "Dominion cooldown", abil, 0, 1000, () -> { c.abilityX = abil[0]; c.abilityY = abil[1]; save.run(); rebuildWidgets(); });
 				footer = "The HUD behind this window moves live. Open Controls to rebind the keys (Y menu, V Sixth Sense).";
-				y -= 22;
+				footY = y + 3 * 26 + 6;
 			}
 		}
-		int footY = cfgPage == 3 ? y + 9 * 21 + 6 : cfgPage == 4 ? y + 22 + 3 * 26 + 6 : y + 7 * 21 + 6;
-		label(Component.literal(footer).withStyle(c.testMode && cfgPage == 0 ? ChatFormatting.RED : ChatFormatting.DARK_GRAY), lx, footY);
+		label(Component.literal(footer).withStyle(c.testMode && cfgPage == 2 ? ChatFormatting.RED : ChatFormatting.DARK_GRAY), lx, footY);
 	}
 
 	// ------------------------------------------------------------------ render

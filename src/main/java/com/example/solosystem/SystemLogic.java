@@ -179,6 +179,8 @@ public final class SystemLogic {
 			if (t % 4 == 0) magnet(p, d);
 			if (t % 10 == 0) hungerEfficiency(p, d);
 			if (t % 40 == 0) regen(p, d);
+			if (t % 80 == 0) QolSkills.caretaker(p, d);
+			if (t % 100 == 0) QolSkills.verdant(p, d);
 			if (t % 10 == 0) secondWind(p, d, t);
 			if (t % 20 == 0) {
 				applyAll(p, d);
@@ -218,12 +220,14 @@ public final class SystemLogic {
 		if (fish > 0) {
 			addExp(p, fish * 12.0);
 			QuestLogic.progress(p, QuestType.FISH, fish);
+			QolSkills.onFish(p, fish);
 			rollSkill(p, Math.min(1.0, 0.04 * fish), 0.5);   // fishing
 		}
 		long bred = cur[2] - last[2];
 		if (bred > 0) {
 			addExp(p, bred * 8.0);
 			QuestLogic.progress(p, QuestType.BREED, bred);
+			QolSkills.onBreed(p, bred);
 			rollSkill(p, Math.min(1.0, 0.03 * bred), 0);    // farming / ranching
 		}
 		long trade = cur[3] - last[3];
@@ -328,7 +332,7 @@ public final class SystemLogic {
 		mod(p, Attributes.LUCK, "luck", 1.0 * d.rank(PassiveSkill.LUCKY) + 0.5 * d.rank(PassiveSkill.ANGLERS_LUCK), Operation.ADD_VALUE);
 		int sov = d.rank(PassiveSkill.SOVEREIGN_REACH);
 		mod(p, Attributes.BLOCK_INTERACTION_RANGE, "block_reach", 2.0 * sov, Operation.ADD_VALUE);
-		mod(p, Attributes.ENTITY_INTERACTION_RANGE, "entity_reach", 1.5 * sov, Operation.ADD_VALUE);
+		mod(p, Attributes.ENTITY_INTERACTION_RANGE, "entity_reach", 1.5 * sov + 0.75 * d.rank(PassiveSkill.SHEPHERDS_REACH), Operation.ADD_VALUE);
 		mod(p, Attributes.STEP_HEIGHT, "step", 0.4 * d.rank(PassiveSkill.LIGHT_FEET), Operation.ADD_VALUE);
 		mod(p, Attributes.MINING_EFFICIENCY, "mining", 1.0 * d.rank(PassiveSkill.MINERS_HANDS) + 0.5 * d.rank(PassiveSkill.QUICK_HANDS) + 2.0 * d.rank(PassiveSkill.WORLD_BREAKER), Operation.ADD_VALUE);
 		mod(p, Attributes.ATTACK_SPEED, "atkspeed", 0.10 * d.rank(PassiveSkill.SHADOW_HASTE), Operation.ADD_MULTIPLIED_BASE);

@@ -28,6 +28,12 @@ public final class Mobs {
 		return e.getType().getCategory() == MobCategory.MONSTER;
 	}
 
+	/** Peaceful animals (cows, sheep, pigs, horses and modded ones): the CREATURE spawn category. */
+	public static boolean isAnimal(Entity e) {
+		if (e == null || e instanceof Player || isHostile(e)) return false;
+		return e.getType().getCategory() == MobCategory.CREATURE;
+	}
+
 	/** Dragons, withers and modded bosses: very high health. */
 	public static boolean isBoss(net.minecraft.world.entity.LivingEntity e) { return e.getMaxHealth() >= 150f; }
 }
