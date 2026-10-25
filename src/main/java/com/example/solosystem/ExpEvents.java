@@ -89,8 +89,8 @@ public final class ExpEvents {
 
 	private static void onKill(ServerPlayer sp, LivingEntity victim) {
 		double hp = victim.getMaxHealth();
-		boolean boss = victim instanceof EnderDragon || victim instanceof WitherBoss;
-		boolean hostile = victim instanceof Enemy;
+		boolean boss = victim instanceof EnderDragon || victim instanceof WitherBoss || Mobs.isBoss(victim);
+		boolean hostile = Mobs.isHostile(victim);
 
 		double exp = hp * (hostile ? 0.8 : 0.3) + (hostile ? 4 : 0);
 		if (boss) exp += 1000;

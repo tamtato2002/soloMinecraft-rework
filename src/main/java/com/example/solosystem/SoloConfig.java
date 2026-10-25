@@ -36,13 +36,39 @@ public final class SoloConfig {
 		public boolean radar = true;          // Sixth Sense HUD
 		public boolean senseEsp = true;       // Sixth Sense in-world overlay (ore markers / enemy HP bars)
 		public int radarSize = 90;
-		public int radarCorner = 0; // 0 top-right, 1 top-left, 2 bottom-right, 3 bottom-left
+		public int radarCorner = 0; // (old) unused, replaced by radarX / radarY
+
+		// ---- Sixth Sense
+		public boolean showOres = true;
+		public boolean showEnemies = true;
+		public boolean showSecrets = true;
+		public int espRange = 36;       // max distance (blocks) for in-world ore markers / enemy HP bars
+		public int radarOpacity = 63;   // map background opacity in %
+
+		// ---- HUD positions: 0..1000 = fraction of the free screen space (left->right, top->bottom)
+		public int radarX = 1000, radarY = 0;     // default: top-right
+		public int toastX = 0, toastY = 0;        // default: top-left
+		public int abilityX = 0, abilityY = 1000; // default: bottom-left
+
+		// ---- other mods
+		/** ore colours: "DIAMOND" (built-in type), "modid:block" / "modid:base_name" (modded ore) or "#modid:tag" -> "#RRGGBB" */
+		public java.util.Map<String, String> oreColors = new java.util.LinkedHashMap<>();
+		/** entity ids ("modid:thing") that Sixth Sense / Dominion / EXP always treat as enemies */
+		public String[] extraEnemies = {};
+		/** entity ids that are never treated as enemies */
+		public String[] ignoredEnemies = {};
+		/** held item names that switch Sixth Sense to ore mode / enemy mode (matched against the end of the item id) */
+		public String[] pickKeywords = {"pickaxe", "_pick"};
+		public String[] weaponKeywords = {"sword", "axe", "trident", "mace", "bow", "spear", "dagger", "scythe", "katana", "rapier", "staff", "wand"};
 		public boolean menuPausesGame = false;
 
 		// ---- extra items (e.g. weapons from other mods) added to the random pools
 		public String[][] extraQuestRewards = {{}, {}, {}, {}, {}};
 		public String[][] extraLoot = {{}, {}, {}, {}, {}};
 	}
+
+	/** bumped on every save so cached colours are re-read */
+	public static int version = 0;
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static Data data;
@@ -74,6 +100,7 @@ public final class SoloConfig {
 	public static synchronized void save() {
 		try {
 			clamp(data);
+			version++;
 			try (Writer w = Files.newBufferedWriter(path())) { GSON.toJson(data, w); }
 		} catch (Exception ignored) {}
 	}
@@ -88,6 +115,16 @@ public final class SoloConfig {
 		d.toastSeconds = Math.max(0.5, Math.min(10, d.toastSeconds));
 		d.radarSize = Math.max(50, Math.min(200, d.radarSize));
 		d.orbExpFactor = Math.max(0, Math.min(10, d.orbExpFactor));
+		d.radarX = Math.max(0, Math.min(1000, d.radarX)); d.radarY = Math.max(0, Math.min(1000, d.radarY));
+		d.toastX = Math.max(0, Math.min(1000, d.toastX)); d.toastY = Math.max(0, Math.min(1000, d.toastY));
+		d.abilityX = Math.max(0, Math.min(1000, d.abilityX)); d.abilityY = Math.max(0, Math.min(1000, d.abilityY));
+		d.radarOpacity = Math.max(10, Math.min(100, d.radarOpacity));
+		d.espRange = Math.max(8, Math.min(64, d.espRange));
+		if (d.oreColors == null) d.oreColors = new java.util.LinkedHashMap<>();
+		if (d.extraEnemies == null) d.extraEnemies = new String[0];
+		if (d.ignoredEnemies == null) d.ignoredEnemies = new String[0];
+		if (d.pickKeywords == null) d.pickKeywords = new String[]{"pickaxe", "_pick"};
+		if (d.weaponKeywords == null) d.weaponKeywords = new String[]{"sword", "axe", "bow"};
 		d.radarCorner = Math.max(0, Math.min(3, d.radarCorner));
 		if (d.extraQuestRewards == null || d.extraQuestRewards.length < 5) d.extraQuestRewards = new String[][]{{}, {}, {}, {}, {}};
 		if (d.extraLoot == null || d.extraLoot.length < 5) d.extraLoot = new String[][]{{}, {}, {}, {}, {}};

@@ -87,9 +87,17 @@ public final class QuestToasts {
 
 		for (Iterator<Toast> it = LIST.iterator(); it.hasNext(); ) if (now > it.next().expire) it.remove();
 
+		// configurable position (0..1000 = share of the free screen space)
+		SoloConfig.Data cfg = SoloConfig.get();
+		int gw = g.guiWidth(), gh = g.guiHeight();
+		int baseX = 6 + (int) Math.round((gw - W - 12) * cfg.toastX / 1000.0);
+		int baseY = TOP + (int) Math.round((gh - TOP - H - 6) * cfg.toastY / 1000.0);
+		boolean stackUp = cfg.toastY > 500;
+		int dir = cfg.toastX > 500 ? 1 : -1; // slide in from the nearest screen edge
+
 		int slot = 0;
 		for (Toast t : LIST) {
-			float targetY = TOP + slot * (H + GAP);
+			float targetY = stackUp ? baseY - slot * (H + GAP) : baseY + slot * (H + GAP);
 			if (!t.placed) { t.y = targetY; t.placed = true; }
 			t.y += (targetY - t.y) * (1f - (float) Math.exp(-dt * 14f));
 			float goal = Math.min(1f, t.cur / (float) Math.max(1, t.target));
@@ -101,7 +109,7 @@ public final class QuestToasts {
 			double leave = 1.0 - Math.min(1.0, (t.expire - now) / SLIDE_OUT);
 			double outE = 1.0 - leave * leave * leave;
 			double k = Math.max(0.0, Math.min(inE, outE));
-			int x = 6 - (int) Math.round((W + 10) * (1.0 - k));
+			int x = baseX + dir * (int) Math.round((W + 10) * (1.0 - k));
 			int y = Math.round(t.y);
 
 			SkillRarity r = QuestLogic.tierRarity(t.tier);

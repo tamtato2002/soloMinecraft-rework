@@ -49,8 +49,8 @@ public final class Dominion {
 	/** Called when a monster damages the player. Returns true if the monster was turned (the hit is cancelled). */
 	public static boolean tryCharm(ServerPlayer sp, PlayerData d, Entity attacker) {
 		if (!SoloConfig.get().enableDominion || !d.has(Stat.INTELLIGENCE, 2)) return false;
-		if (!(attacker instanceof Mob mob) || !(mob instanceof Enemy) || EXPIRY.containsKey(mob)) return false;
-		if (mob instanceof EnderDragon || mob instanceof WitherBoss) return false;
+		if (!(attacker instanceof Mob mob) || !Mobs.isHostile(mob) || EXPIRY.containsKey(mob)) return false;
+		if (mob instanceof EnderDragon || mob instanceof WitherBoss || Mobs.isBoss(mob)) return false;
 		long now = now(sp);
 		if (now < d.domReady) return false;
 		int in = d.stat(Stat.INTELLIGENCE);
@@ -117,7 +117,7 @@ public final class Dominion {
 
 			Mob best = null;
 			double bestD = Double.MAX_VALUE;
-			for (Mob other : m.level().getEntitiesOfClass(Mob.class, m.getBoundingBox().inflate(16), e -> e != m && e instanceof Enemy && !EXPIRY.containsKey(e) && e.isAlive())) {
+			for (Mob other : m.level().getEntitiesOfClass(Mob.class, m.getBoundingBox().inflate(16), e -> e != m && Mobs.isHostile(e) && !EXPIRY.containsKey(e) && e.isAlive())) {
 				double dd = other.distanceToSqr(m);
 				if (dd < bestD) { bestD = dd; best = other; }
 			}

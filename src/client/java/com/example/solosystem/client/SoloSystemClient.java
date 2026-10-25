@@ -38,10 +38,19 @@ public class SoloSystemClient implements ClientModInitializer {
 		KeyMapping open = KeyMappingHelper.registerKeyMapping(
 			new KeyMapping("key.solosystem.open", InputConstants.Type.KEYBOARD, SDLScancode.SDL_SCANCODE_Y, category));
 
+		KeyMapping toggleSense = KeyMappingHelper.registerKeyMapping(
+			new KeyMapping("key.solosystem.toggle_sense", InputConstants.Type.KEYBOARD, SDLScancode.SDL_SCANCODE_V, category));
+
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
 			QuestToasts.tick();
 			Popups.tick();
 			SixthSense.tick(mc);
+			while (toggleSense.consumeClick()) {
+				SoloConfig.Data c = SoloConfig.get();
+				c.radar = !c.radar;
+				SoloConfig.save();
+				Popups.push(c.radar ? "SIXTH SENSE ON" : "SIXTH SENSE OFF", 2);
+			}
 			while (open.consumeClick()) {
 				if (mc.gui.screen() == null && mc.player != null) mc.gui.setScreen(new SystemScreen());
 			}

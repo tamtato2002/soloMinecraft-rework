@@ -20,7 +20,9 @@ public final class AbilityHud {
 		boolean ready = left <= 0;
 		String text = ready ? "Dominion: READY" : String.format("Dominion: %.1fs", left / 20.0);
 		int w = mc.font.width(text) + 10;
-		int x = 6, y = g.guiHeight() - 24;
+		SoloConfig.Data cfg = SoloConfig.get();
+		int x = 6 + (int) Math.round((g.guiWidth() - w - 12) * cfg.abilityX / 1000.0);
+		int y = 6 + (int) Math.round((g.guiHeight() - 14 - 12) * cfg.abilityY / 1000.0);
 		int accent = ready ? 0xFFB45CFF : 0xFF5A5E68;
 
 		g.fill(x, y, x + w, y + 14, 0xC0101828);
