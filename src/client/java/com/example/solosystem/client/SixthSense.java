@@ -71,6 +71,15 @@ public final class SixthSense {
 
 	private static double nowMs() { return System.nanoTime() / 1_000_000.0; }
 
+	/** {x, y, w, h, minX, maxX, minY, maxY} of the map - shared with the drag editor. */
+	public static int[] radarRect(int gw, int gh, SoloConfig.Data cfg) {
+		int size = cfg.radarSize, m = 4;
+		int minX = m, maxX = Math.max(minX, gw - size - m), minY = m, maxY = Math.max(minY, gh - size - m);
+		int x = minX + (int) Math.round((maxX - minX) * cfg.radarX / 1000.0);
+		int y = minY + (int) Math.round((maxY - minY) * cfg.radarY / 1000.0);
+		return new int[]{x, y, size, size, minX, maxX, minY, maxY};
+	}
+
 	private static boolean active(Minecraft mc) {
 		return SoloConfig.get().radar && mc.player != null && mc.level != null && ClientState.data.has(Stat.SENSE, 1);
 	}
@@ -468,8 +477,8 @@ public final class SixthSense {
 		int size = cfg.radarSize, margin = 4;
 		int gw = g.guiWidth(), gh = g.guiHeight();
 		// free position: 0..1000 = share of the free screen space
-		int x0 = margin + (int) Math.round((gw - size - 2.0 * margin) * cfg.radarX / 1000.0);
-		int y0 = margin + (int) Math.round((gh - size - 2.0 * margin) * cfg.radarY / 1000.0);
+		int[] rr = radarRect(gw, gh, cfg);
+		int x0 = rr[0], y0 = rr[1];
 		int cx = x0 + size / 2, cy = y0 + size / 2;
 		boolean pulse = (mc.level.getGameTime() / 5) % 2 == 0;
 

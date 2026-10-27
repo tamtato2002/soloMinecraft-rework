@@ -4,7 +4,9 @@ public enum Stat {
 	STRENGTH("strength", "Strength", "Close combat & breaking things", new Ability[]{
 		new Ability("Physical Damage", "+0.3 melee damage / point (all weapons & fists)", 0),
 		new Ability("Block Break Speed", "Break blocks faster, even bare-handed", 20),
-		new Ability("Knockback Resistance", "Hard to push around when hit", 45)}),
+		new Ability("Knockback Resistance", "Hard to push around when hit", 45),
+		new Ability("Armor Piercing", "Your hits and arrows ignore mob armor and shields", 55),
+		new Ability("Plunder", "Slain mobs drop ALL gear and items, durability kept", 75)}),
 	AGILITY("agility", "Agility", "Speed, dodging and parkour", new Ability[]{
 		new Ability("Movement & Sprint Speed", "Faster walking, sprinting and swimming", 0),
 		new Ability("Jump Height & Parkour", "Jump higher (fences, 2-block walls)", 15),

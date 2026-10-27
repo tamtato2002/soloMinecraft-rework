@@ -38,6 +38,14 @@ public final class QuestToasts {
 
 	private static double nowMs() { return System.nanoTime() / 1_000_000.0; }
 
+	/** Where the first toast sits: {x, y, w, h, minX, maxX, minY, maxY} - shared with the drag editor. */
+	public static int[] rect(int gw, int gh, SoloConfig.Data cfg) {
+		int minX = 6, maxX = Math.max(minX, gw - W - 6), minY = TOP, maxY = Math.max(minY, gh - H - 6);
+		int x = minX + (int) Math.round((maxX - minX) * cfg.toastX / 1000.0);
+		int y = minY + (int) Math.round((maxY - minY) * cfg.toastY / 1000.0);
+		return new int[]{x, y, W, H, minX, maxX, minY, maxY};
+	}
+
 	private static double lifeMs(boolean done) { return SoloConfig.get().toastSeconds * 1000.0 + (done ? 1500 : 0); }
 
 	/** Compare old and new quest data and pop a toast for anything that moved. */
@@ -90,9 +98,14 @@ public final class QuestToasts {
 		// configurable position (0..1000 = share of the free screen space)
 		SoloConfig.Data cfg = SoloConfig.get();
 		int gw = g.guiWidth(), gh = g.guiHeight();
-		int baseX = 6 + (int) Math.round((gw - W - 12) * cfg.toastX / 1000.0);
-		int baseY = TOP + (int) Math.round((gh - TOP - H - 6) * cfg.toastY / 1000.0);
+		int[] r0 = rect(gw, gh, cfg);
+		int baseX = r0[0], baseY = r0[1];
 		boolean stackUp = cfg.toastY > 500;
+		// game / other-mod toasts (advancements ...) are stacked at the top-right: step below them instead of overlapping
+		if (cfg.toastAvoidOverlap && !stackUp) {
+			int occupied = ForeignToasts.occupiedBottom();
+			if (occupied > 0 && baseX + W > gw - ForeignToasts.WIDTH - 4 && baseY < occupied + 2) baseY = occupied + 2;
+		}
 		int dir = cfg.toastX > 500 ? 1 : -1; // slide in from the nearest screen edge
 
 		int slot = 0;
@@ -123,7 +136,7 @@ public final class QuestToasts {
 			g.fill(x + W - 1, y, x + W, y + H, accent);
 			g.fill(x, y, x + 3, y + H, accent);
 
-			String title = t.done ? "QUEST CLEAR!" : "DAILY QUEST  [" + r.name() + "]";
+			String title = t.done ? "QUEST CLEAR!  Claim in menu" : "DAILY QUEST  [" + r.name() + "]";
 			g.text(font, Component.literal(title).withStyle(t.done ? ChatFormatting.GREEN : ChatFormatting.GRAY), x + 8, y + 4, 0xFFFFFFFF, true);
 			g.text(font, Component.literal(t.name + "   " + t.cur + "/" + t.target), x + 8, y + 15, 0xFFFFFFFF, true);
 

@@ -4,6 +4,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -18,7 +20,8 @@ public class PlayerData {
 		Codec.LONG.optionalFieldOf("questExpiry", 0L).forGetter(d -> d.questExpiry),
 		Quest.CODEC.listOf().optionalFieldOf("quests", List.of()).forGetter(d -> d.quests),
 		Codec.STRING.listOf().optionalFieldOf("lastQuestTypes", List.of()).forGetter(d -> d.lastQuestTypes),
-		Codec.LONG.optionalFieldOf("domReady", 0L).forGetter(d -> d.domReady)
+		Codec.LONG.optionalFieldOf("domReady", 0L).forGetter(d -> d.domReady),
+		Codec.STRING.listOf().optionalFieldOf("disabled", List.of()).forGetter(d -> new ArrayList<>(d.disabled))
 	).apply(i, PlayerData::new));
 
 	public int level = 1;
@@ -35,12 +38,14 @@ public class PlayerData {
 	public final List<String> lastQuestTypes = new ArrayList<>();
 	/** game tick when the Dominion ability is ready again */
 	public long domReady = 0;
+	/** passive skills ("light_feet") and stat abilities ("strength:3") the player switched OFF */
+	public final Set<String> disabled = new HashSet<>();
 
 	public PlayerData() {}
 
 	public PlayerData(int level, double exp, int points, Map<String, Integer> stats, Map<String, Integer> skills,
 					  Map<String, Integer> resist, long questExpiry, List<Quest> quests,
-					  List<String> lastQuestTypes, long domReady) {
+					  List<String> lastQuestTypes, long domReady, List<String> disabled) {
 		this.level = level; this.exp = exp; this.points = points;
 		this.stats.putAll(stats); this.skills.putAll(skills); this.resist.putAll(resist);
 		migrateStatIds(this.stats);
@@ -48,6 +53,7 @@ public class PlayerData {
 		for (Quest q : quests) this.quests.add(q.copy());
 		this.lastQuestTypes.addAll(lastQuestTypes);
 		this.domReady = domReady;
+		this.disabled.addAll(disabled);
 	}
 
 	/** Old saves used str/agi/vit/int/per. */
@@ -59,15 +65,24 @@ public class PlayerData {
 		}
 	}
 
-	/** Is ability number {@code idx} of this stat unlocked? */
-	public boolean has(Stat s, int idx) { return idx < s.abilities.length && stat(s) >= s.abilities[idx].need(); }
+	/** Stat reached the level needed for ability {@code idx} (regardless of the ON/OFF switch). */
+	public boolean unlocked(Stat s, int idx) { return idx < s.abilities.length && stat(s) >= s.abilities[idx].need(); }
+
+	public static String abilityKey(Stat s, int idx) { return s.id + ":" + idx; }
+
+	/** Unlocked AND switched on: this is what every game effect checks. */
+	public boolean has(Stat s, int idx) { return unlocked(s, idx) && !disabled.contains(abilityKey(s, idx)); }
 
 	public int stat(Stat s) { return stats.getOrDefault(s.id(), 0); }
-	public int rank(PassiveSkill s) { return skills.getOrDefault(s.id(), 0); }
+	/** Rank you own, even if the skill is switched off. */
+	public int rawRank(PassiveSkill s) { return skills.getOrDefault(s.id(), 0); }
+
+	/** Rank that counts for game effects: 0 while the skill is switched off. */
+	public int rank(PassiveSkill s) { return disabled.contains(s.id()) ? 0 : rawRank(s); }
 
 	/** 40 + 18L + 4L^2 (Lv1->2 = 62, Lv10 = 620, Lv50 = 10940). */
 	public static double expToNext(int level) { return 40 + 18.0 * level + 4.0 * level * level; }
 	public double expToNext() { return expToNext(level); }
 
-	public PlayerData copy() { return new PlayerData(level, exp, points, stats, skills, resist, questExpiry, quests, lastQuestTypes, domReady); }
+	public PlayerData copy() { return new PlayerData(level, exp, points, stats, skills, resist, questExpiry, quests, lastQuestTypes, domReady, new ArrayList<>(disabled)); }
 }

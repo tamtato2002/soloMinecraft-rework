@@ -32,6 +32,7 @@ public final class ResistLogic {
 
 	public static void register() {
 		registerUndying();
+		registerPlunder();
 		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
 			if (REENTRY.get() || amount <= 0) return true;
 			SoloConfig.Data cfg = SoloConfig.get();
@@ -40,11 +41,21 @@ public final class ResistLogic {
 
 			// ---- attacker side: critical hit (Sense)
 			if (cfg.enableCrit && source.getEntity() instanceof ServerPlayer atk && entity != atk) {
-				int sense = SystemLogic.data(atk).stat(Stat.SENSE);
-				if (sense > 0 && rnd.nextDouble() < Math.min(0.6, 0.004 * sense)) {
+				PlayerData cd = SystemLogic.data(atk);
+				int sense = cd.stat(Stat.SENSE);
+				if (sense > 0 && cd.has(Stat.SENSE, 0) && rnd.nextDouble() < Math.min(0.6, 0.004 * sense)) {
 					mult *= Math.min(3.0, 1.5 + 0.01 * sense);
 					ServerPlayNetworking.send(atk, new PopupPayload("CRIT!", 1));
 				}
+			}
+
+			// ---- attacker side: Armor Piercing (Strength 55). Player hits and arrows ignore armor and shields of any mob (modded too):
+			// the damage is re-applied as magic damage that is still credited to the player.
+			ServerPlayer pierceBy = null;
+			if (source.getEntity() instanceof ServerPlayer pa && !(entity instanceof net.minecraft.world.entity.player.Player)
+				&& SystemLogic.data(pa).has(Stat.STRENGTH, 3) && !source.is(DamageTypeTags.BYPASSES_ARMOR)
+				&& (source.getDirectEntity() == pa || source.is(DamageTypeTags.IS_PROJECTILE))) {
+				pierceBy = pa;
 			}
 
 			// ---- attacker side: Vampiric Touch (lifesteal) and Executioner
@@ -89,12 +100,14 @@ public final class ResistLogic {
 				}
 			}
 
-			if (Math.abs(mult - 1.0) < 0.001) return true;
+			if (Math.abs(mult - 1.0) < 0.001 && pierceBy == null) return true;
 
 			// re-apply the damage with the modified amount (guarded against recursion)
 			REENTRY.set(true);
 			try {
-				entity.hurtServer((ServerLevel) entity.level(), source, (float) (amount * mult));
+				ServerLevel lv = (ServerLevel) entity.level();
+				DamageSource applied = pierceBy != null ? lv.damageSources().indirectMagic(pierceBy, pierceBy) : source;
+				entity.hurtServer(lv, applied, (float) (amount * mult));
 			} finally {
 				REENTRY.set(false);
 			}
@@ -128,6 +141,40 @@ public final class ResistLogic {
 			}
 			return false;
 		});
+	}
+
+	/** Strength 75 "Plunder": a mob killed by you drops ALL its gear and carried items, exactly as damaged as they were. */
+	private static void registerPlunder() {
+		ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
+			if (entity instanceof net.minecraft.world.entity.player.Player) return true;
+			if (!(source.getEntity() instanceof ServerPlayer killer)) return true;
+			if (!SystemLogic.data(killer).has(Stat.STRENGTH, 4)) return true;
+			if (!(entity.level() instanceof ServerLevel level)) return true;
+
+			for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
+				net.minecraft.world.item.ItemStack st = entity.getItemBySlot(slot);
+				if (st.isEmpty()) continue;
+				spawnLoot(level, entity, st.copy());
+				entity.setItemSlot(slot, net.minecraft.world.item.ItemStack.EMPTY); // so the normal death drops do not duplicate it
+			}
+			// carried items: any mob (vanilla or modded) that exposes getInventory() -> Container (piglins, villagers ...)
+			try {
+				Object inv = entity.getClass().getMethod("getInventory").invoke(entity);
+				if (inv instanceof net.minecraft.world.Container box) {
+					for (int i = 0; i < box.getContainerSize(); i++) {
+						net.minecraft.world.item.ItemStack it = box.getItem(i);
+						if (it.isEmpty()) continue;
+						spawnLoot(level, entity, it.copy());
+						box.setItem(i, net.minecraft.world.item.ItemStack.EMPTY);
+					}
+				}
+			} catch (Exception ignored) {}
+			return true;
+		});
+	}
+
+	private static void spawnLoot(ServerLevel level, LivingEntity from, net.minecraft.world.item.ItemStack stack) {
+		level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level, from.getX(), from.getY() + 0.5, from.getZ(), stack));
 	}
 
 	private static void registerUndying() {

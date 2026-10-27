@@ -38,6 +38,9 @@ public class SystemScreen extends Screen {
 	private final List<Label> labels = new ArrayList<>();
 	private final List<Pic> pics = new ArrayList<>();
 	private final List<Rect> rects = new ArrayList<>();
+	private record Click(int x1, int y1, int x2, int y2, String key) {}
+	private final List<Click> clicks = new ArrayList<>();
+	private boolean wasDown;
 	private int timerX, timerY;
 
 	public SystemScreen() { super(Component.literal("SYSTEM")); }
@@ -53,6 +56,7 @@ public class SystemScreen extends Screen {
 		labels.clear();
 		pics.clear();
 		rects.clear();
+		clicks.clear();
 		PlayerData d = ClientState.data;
 		int cx = width / 2;
 		int top = Math.max(6, height / 2 - 122);
@@ -69,6 +73,9 @@ public class SystemScreen extends Screen {
 			pics.add(new Pic(TAB_ICONS[i], x + 4, top + 3, 1));
 			label(Component.literal(TABS[i]).withStyle(tab == i ? ChatFormatting.GOLD : ChatFormatting.WHITE), x + 24, top + 7);
 			if (tab == i) rects.add(new Rect(x + 2, top + 20, x + w[i] - 2, top + 22, 0xFFFFD93D));
+			if (i == 2) { // red dot on QUESTS while a finished quest is waiting to be claimed
+				for (Quest q : d.quests) if (q.done && !q.claimed) { rects.add(new Rect(x + w[i] - 8, top + 2, x + w[i] - 2, top + 8, 0xFFFF3030)); break; }
+			}
 			x += w[i] + 3;
 		}
 
@@ -83,6 +90,20 @@ public class SystemScreen extends Screen {
 	}
 
 	private void label(Component c, int x, int y) { labels.add(new Label(c, x, y)); }
+
+	/** A name you can click to switch a skill / ability ON or OFF (key = "light_feet" or "strength:3"). */
+	private void toggleLabel(String key, boolean on, String name, int rgbOn, int x, int y) {
+		String plain = (on ? "[ON] " : "[OFF] ") + name;
+		Component c = on ? Component.literal(plain).withStyle(ChatFormatting.GREEN)
+			: Component.literal(plain).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.STRIKETHROUGH);
+		labels.add(new Label(c, x, y));
+		clicks.add(new Click(x - 1, y - 1, x + font.width(plain) + 1, y + 9, key));
+	}
+
+	private void tick(int x, int y) { // pixel-art green check mark
+		int[][] px = {{0, 3}, {1, 4}, {2, 5}, {3, 4}, {4, 3}, {5, 2}, {6, 1}, {7, 0}};
+		for (int[] p : px) rects.add(new Rect(x + p[0] * 2, y + p[1] * 2, x + p[0] * 2 + 3, y + p[1] * 2 + 3, 0xFF55FF55));
+	}
 
 	// ------------------------------------------------------------------ STATUS
 
@@ -134,13 +155,16 @@ public class SystemScreen extends Screen {
 		pics.add(new Pic(STAT_ICONS[selStat], left, y - 3, 1));
 		label(Component.literal(s.label + " abilities").withStyle(ChatFormatting.GOLD), left + 20, y);
 		y += 12;
-		for (Ability a : s.abilities) {
-			boolean open = d.stat(s) >= a.need();
-			Component line = open
-				? Component.literal("[UNLOCKED] " + a.name()).withStyle(ChatFormatting.GREEN)
-					.append(Component.literal("  " + a.desc()).withStyle(ChatFormatting.GRAY))
-				: Component.literal("[needs " + a.need() + "] " + a.name()).withStyle(ChatFormatting.DARK_GRAY);
-			label(line, left, y);
+		label(Component.literal("click a name to switch it ON / OFF").withStyle(ChatFormatting.DARK_GRAY), left + 150, y - 12);
+		for (int i = 0; i < s.abilities.length; i++) {
+			Ability a = s.abilities[i];
+			if (d.unlocked(s, i)) {
+				boolean on = d.has(s, i);
+				toggleLabel(PlayerData.abilityKey(s, i), on, a.name(), 0, left, y);
+				label(Component.literal(on ? a.desc() : "(off)").withStyle(ChatFormatting.GRAY), left + font.width((on ? "[ON] " : "[OFF] ") + a.name()) + 8, y);
+			} else {
+				label(Component.literal("[needs " + a.need() + "] " + a.name()).withStyle(ChatFormatting.DARK_GRAY), left, y);
+			}
 			y += 10;
 		}
 	}
@@ -153,10 +177,10 @@ public class SystemScreen extends Screen {
 
 	/** Skills are grouped by tier; pick a tier and its skills are listed in aligned columns. */
 	private void skills(PlayerData d, int cx, int y) {
-		int left = cx - 200;
+		int left = cx - 205;
 		PassiveSkill[] all = PassiveSkill.values();
 		int found = 0;
-		for (PassiveSkill s : all) if (d.rank(s) > 0) found++;
+		for (PassiveSkill s : all) if (d.rawRank(s) > 0) found++;
 		label(Component.literal("Passive Skills discovered: " + found + "/" + all.length).withStyle(ChatFormatting.YELLOW), left, y);
 		y += 14;
 
@@ -165,7 +189,7 @@ public class SystemScreen extends Screen {
 		for (int k = tiers.length - 1; k >= 0; k--) {
 			final int tier = k;
 			int total = 0, own = 0;
-			for (PassiveSkill s : all) if (s.rarity == tiers[k]) { total++; if (d.rank(s) > 0) own++; }
+			for (PassiveSkill s : all) if (s.rarity == tiers[k]) { total++; if (d.rawRank(s) > 0) own++; }
 			String name = tiers[k].name() + " " + own + "/" + total;
 			Component text = Component.literal((skillTier == k ? "[" + name + "]" : name)).withStyle(tiers[k].color);
 			addRenderableWidget(Button.builder(text, b -> { skillTier = tier; rebuildWidgets(); })
@@ -174,8 +198,8 @@ public class SystemScreen extends Screen {
 		y += 24;
 
 		// aligned table: SKILL | RANK | EFFECT
-		int colRank = left + 128, colDesc = left + 172;
-		label(Component.literal("SKILL").withStyle(ChatFormatting.DARK_GRAY), left, y);
+		int colRank = left + 152, colDesc = left + 196;
+		label(Component.literal("SKILL  (click a name: ON / OFF)").withStyle(ChatFormatting.DARK_GRAY), left, y);
 		label(Component.literal("RANK").withStyle(ChatFormatting.DARK_GRAY), colRank, y);
 		label(Component.literal("EFFECT").withStyle(ChatFormatting.DARK_GRAY), colDesc, y);
 		rects.add(new Rect(left, y + 10, left + 400, y + 11, 0x60FFFFFF));
@@ -184,11 +208,17 @@ public class SystemScreen extends Screen {
 		SkillRarity tr = tiers[skillTier];
 		for (PassiveSkill s : all) {
 			if (s.rarity != tr) continue;
-			int rank = d.rank(s);
+			int rank = d.rawRank(s);
 			if (rank > 0) {
-				label(Component.literal(s.displayName).withStyle(tr.color), left, y);
+				boolean on = !d.disabled.contains(s.id());
+				String plain = (on ? "[ON] " : "[OFF] ") + s.displayName;
+				// active = tier colour, inactive = grey + struck through
+				Component name = on ? Component.literal(plain).withStyle(tr.color)
+					: Component.literal(plain).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.STRIKETHROUGH);
+				labels.add(new Label(name, left, y));
+				clicks.add(new Click(left - 1, y - 1, left + font.width(plain) + 1, y + 9, s.id()));
 				label(Component.literal(ROMAN[rank] + " / " + ROMAN[s.maxRank]).withStyle(rank >= s.maxRank ? ChatFormatting.GOLD : ChatFormatting.WHITE), colRank, y);
-				label(Component.literal(trim(s.desc, 40)).withStyle(ChatFormatting.GRAY), colDesc, y);
+				label(Component.literal(trim(on ? s.desc : "(switched off)", 36)).withStyle(ChatFormatting.GRAY), colDesc, y);
 			} else {
 				label(Component.literal("???").withStyle(ChatFormatting.DARK_GRAY), left, y);
 				label(Component.literal("- / " + ROMAN[s.maxRank]).withStyle(ChatFormatting.DARK_GRAY), colRank, y);
@@ -212,17 +242,31 @@ public class SystemScreen extends Screen {
 			label(Component.literal("Waiting for quests...").withStyle(ChatFormatting.GRAY), left, y);
 			return;
 		}
+		int index = 0;
 		for (Quest q : d.quests) {
+			final int qi = index++;
 			SkillRarity r = QuestLogic.tierRarity(q.tier);
 			QuestType t = QuestType.byId(q.type);
 			String name = t == null ? q.type : t.label;
 			Component head = Component.literal("[" + r.name() + "] " + "*".repeat(Math.max(0, Math.min(4, q.tier)) + 1) + "  " + name + "  " + (int) q.progress + "/" + q.target).withStyle(r.color);
-			if (q.done) head = head.copy().append(Component.literal("  CLEAR").withStyle(ChatFormatting.GREEN));
-			label(head, left, y); y += 11;
-			label(Component.literal("Reward: " + QuestLogic.rewardLine1(q)).withStyle(ChatFormatting.GRAY), left + 8, y); y += 10;
+			if (q.claimed) head = head.copy().append(Component.literal("  CLAIMED").withStyle(ChatFormatting.GREEN));
+			else if (q.done) head = head.copy().append(Component.literal("  COMPLETE").withStyle(ChatFormatting.YELLOW));
+			label(head, left, y);
+			int lineY = y + 11;
+			label(Component.literal("Reward: " + QuestLogic.rewardLine1(q)).withStyle(ChatFormatting.GRAY), left + 8, lineY);
+
+			// CLAIM button once the quest is complete; a green check mark after the reward was collected
+			if (q.claimed) {
+				tick(left + 300, y + 2);
+				label(Component.literal("Claimed").withStyle(ChatFormatting.GREEN), left + 320, y + 6);
+			} else if (q.done) {
+				addRenderableWidget(Button.builder(Component.literal("CLAIM").withStyle(ChatFormatting.GREEN), b -> ClientPlayNetworking.send(new AllocatePayload("__claim", qi)))
+					.bounds(left + 296, y - 1, 64, 18).build());
+			}
+			y += 21;
 			label(Component.literal(QuestLogic.rewardLine2(q)).withStyle(ChatFormatting.DARK_GRAY), left + 8, y); y += 16;
 		}
-		label(Component.literal("Resets every Minecraft day (24000 ticks). Rewards are random per quest.").withStyle(ChatFormatting.DARK_GRAY), left, y);
+		label(Component.literal("Resets every Minecraft day. Rewards must be claimed - unclaimed ones are auto-claimed at the reset.").withStyle(ChatFormatting.DARK_GRAY), left, y);
 	}
 
 	private String timeLeft() {
@@ -410,6 +454,7 @@ public class SystemScreen extends Screen {
 					SoloConfig.save();
 					rebuildWidgets();
 				}).bounds(lx, y + 4 * 21, 180, 20).build());
+				toggle(5, lx, y, "Toasts avoid overlap", () -> c.toastAvoidOverlap, v -> c.toastAvoidOverlap = v);
 
 				toggle(0, rx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
 				toggle(1, rx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);
@@ -464,6 +509,8 @@ public class SystemScreen extends Screen {
 					hudStep = hudStep == 10 ? 25 : hudStep == 25 ? 50 : hudStep == 50 ? 100 : 10;
 					rebuildWidgets();
 				}).bounds(lx, y - 2, 220, 18).build());
+				addRenderableWidget(Button.builder(Component.literal("Drag & drop HUD..."), b -> Minecraft.getInstance().gui.setScreen(new HudEditScreen(this)))
+					.bounds(lx + 226, y - 2, 140, 18).build());
 				y += 22;
 				Runnable save = SoloConfig::save;
 				int[] radar = {c.radarX, c.radarY}, toast = {c.toastX, c.toastY}, abil = {c.abilityX, c.abilityY};
@@ -485,6 +532,15 @@ public class SystemScreen extends Screen {
 		for (Rect r : rects) graphics.fill(r.x1(), r.y1(), r.x2(), r.y2(), r.color());
 		for (Pic p : pics) Icons.draw(graphics, p.icon(), p.x(), p.y(), p.scale());
 		for (Label l : labels) graphics.text(this.font, l.text(), l.x(), l.y(), 0xFFFFFFFF, true);
+
+		// clickable skill / ability names (hover = underline). Click detection by polling the mouse button.
+		boolean down = Minecraft.getInstance().mouseHandler.isLeftPressed();
+		for (Click c : clicks) {
+			boolean over = mouseX >= c.x1() && mouseX < c.x2() && mouseY >= c.y1() && mouseY < c.y2();
+			if (over) graphics.fill(c.x1() + 1, c.y2() - 1, c.x2() - 1, c.y2(), 0xFFFFFFFF);
+			if (over && down && !wasDown) ClientPlayNetworking.send(new AllocatePayload("__toggle:" + c.key(), 0));
+		}
+		wasDown = down;
 		if (tab == 2 && !ClientState.data.quests.isEmpty()) {
 			graphics.text(this.font, Component.literal("Time left: " + timeLeft()).withStyle(ChatFormatting.RED),
 				timerX, timerY, 0xFFFFFFFF, true);

@@ -32,6 +32,7 @@ public final class SoloConfig {
 
 		// ---- client / HUD
 		public boolean notifications = true;
+		public boolean toastAvoidOverlap = true; // quest toasts move below other toasts (advancements, other mods) in the same spot
 		public double toastSeconds = 2.0;
 		public boolean radar = true;          // Sixth Sense HUD
 		public boolean senseEsp = true;       // Sixth Sense in-world overlay (ore markers / enemy HP bars)

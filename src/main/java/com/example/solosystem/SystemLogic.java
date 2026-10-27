@@ -55,7 +55,7 @@ public final class SystemLogic {
 		if (base <= 0) return;
 		PlayerData d = data(p);
 		double mult = SoloConfig.get().expMultiplier
-			* (1.0 + 0.01 * d.stat(Stat.INTELLIGENCE) + 0.10 * d.rank(PassiveSkill.MONARCH_DOMAIN) + 0.05 * d.rank(PassiveSkill.SAGES_MIND));
+			* (1.0 + (d.has(Stat.INTELLIGENCE, 0) ? 0.01 * d.stat(Stat.INTELLIGENCE) : 0) + 0.10 * d.rank(PassiveSkill.MONARCH_DOMAIN) + 0.05 * d.rank(PassiveSkill.SAGES_MIND));
 		grant(p, d, base * mult);
 	}
 
@@ -86,6 +86,9 @@ public final class SystemLogic {
 	public static void allocate(ServerPlayer p, String statId, int amount) {
 		boolean test = SoloConfig.get().testMode;
 		PlayerData d = data(p);
+
+		if (statId != null && statId.startsWith("__toggle:")) { toggle(p, d, statId.substring(9)); return; }
+		if ("__claim".equals(statId)) { QuestLogic.claim(p, amount); return; }
 
 		if ("__reset".equals(statId)) {            // test mode: wipe all stat points
 			if (!test) return;
@@ -123,6 +126,28 @@ public final class SystemLogic {
 		sync(p);
 	}
 
+	/** Click on a skill / ability name: switch it ON or OFF. Keys: "light_feet" or "strength:3". */
+	private static void toggle(ServerPlayer p, PlayerData d, String key) {
+		String name;
+		int colon = key.indexOf(':');
+		if (colon > 0) {
+			Stat st = Stat.byId(key.substring(0, colon));
+			int idx;
+			try { idx = Integer.parseInt(key.substring(colon + 1)); } catch (NumberFormatException e) { return; }
+			if (st == null || !d.unlocked(st, idx)) return;
+			name = st.abilities[idx].name();
+		} else {
+			PassiveSkill s = PassiveSkill.byId(key);
+			if (s == null || d.rawRank(s) <= 0) return;
+			name = s.displayName;
+		}
+		boolean off = d.disabled.add(key);
+		if (!off) d.disabled.remove(key);
+		msg(p, name + (off ? " switched OFF" : " switched ON"), off ? ChatFormatting.GRAY : ChatFormatting.GREEN);
+		applyAll(p, d);
+		sync(p);
+	}
+
 	// ---------------------------------------------------------------- skills
 
 	/** Roll for a passive skill. rarityBoost shifts odds toward rarer skills. */
@@ -134,15 +159,15 @@ public final class SystemLogic {
 		SkillRarity rarity = rollRarity(rnd, rarityBoost);
 		List<PassiveSkill> pool = new ArrayList<>();
 		for (PassiveSkill s : PassiveSkill.values())
-			if (s.rarity == rarity && d.rank(s) < s.maxRank) pool.add(s);
+			if (s.rarity == rarity && d.rawRank(s) < s.maxRank) pool.add(s);
 		if (pool.isEmpty()) {
 			for (PassiveSkill s : PassiveSkill.values())
-				if (d.rank(s) < s.maxRank) pool.add(s);
+				if (d.rawRank(s) < s.maxRank) pool.add(s);
 		}
 		if (pool.isEmpty()) return;
 
 		PassiveSkill s = pool.get(rnd.nextInt(pool.size()));
-		int rank = d.rank(s) + 1;
+		int rank = d.rawRank(s) + 1;
 		d.skills.put(s.id(), rank);
 		p.sendSystemMessage(Component.literal("[SYSTEM] ").withStyle(ChatFormatting.AQUA)
 			.append(Component.literal("Passive skill acquired: " + s.displayName + " (Rank " + rank + "/" + s.maxRank + ") ["
@@ -266,7 +291,7 @@ public final class SystemLogic {
 
 	private static void regen(ServerPlayer p, PlayerData d) {
 		int end = d.stat(Stat.ENDURANCE);
-		if (end > 0 && p.getHealth() < p.getMaxHealth()) p.heal((float) (0.02 * end));
+		if (end > 0 && d.has(Stat.ENDURANCE, 0) && p.getHealth() < p.getMaxHealth()) p.heal((float) (0.02 * end));
 	}
 
 	/** Endurance ability: hunger that just dropped may be refunded. */
@@ -308,20 +333,20 @@ public final class SystemLogic {
 		int str = d.stat(Stat.STRENGTH), agi = d.stat(Stat.AGILITY), end = d.stat(Stat.ENDURANCE);
 
 		// ---- STRENGTH
-		mod(p, Attributes.ATTACK_DAMAGE, "attack", 0.3 * str + 0.5 * d.rank(PassiveSkill.HUNTERS_INSTINCT) + 1.0 * d.rank(PassiveSkill.BERSERKER), Operation.ADD_VALUE);
+		mod(p, Attributes.ATTACK_DAMAGE, "attack", (d.has(Stat.STRENGTH, 0) ? 0.3 * str : 0) + 0.5 * d.rank(PassiveSkill.HUNTERS_INSTINCT) + 1.0 * d.rank(PassiveSkill.BERSERKER), Operation.ADD_VALUE);
 		mod(p, Attributes.BLOCK_BREAK_SPEED, "break_speed", (d.has(Stat.STRENGTH, 1) ? Math.min(1.0, 0.15 + 0.01 * (str - 20)) : 0) + 0.25 * d.rank(PassiveSkill.WORLD_BREAKER), Operation.ADD_MULTIPLIED_BASE);
 		mod(p, Attributes.KNOCKBACK_RESISTANCE, "kb_resist", d.has(Stat.STRENGTH, 2) ? Math.min(0.9, 0.1 + 0.01 * (str - 45)) : 0, Operation.ADD_VALUE);
 
 		// ---- AGILITY
-		mod(p, Attributes.MOVEMENT_SPEED, "speed", 0.004 * agi + 0.05 * d.rank(PassiveSkill.SWIFT_STEP) + 0.08 * d.rank(PassiveSkill.WINDWALKER) + 0.15 * d.rank(PassiveSkill.SHADOW_HASTE), Operation.ADD_MULTIPLIED_BASE);
+		mod(p, Attributes.MOVEMENT_SPEED, "speed", (d.has(Stat.AGILITY, 0) ? 0.004 * agi : 0) + 0.05 * d.rank(PassiveSkill.SWIFT_STEP) + 0.08 * d.rank(PassiveSkill.WINDWALKER) + 0.15 * d.rank(PassiveSkill.SHADOW_HASTE), Operation.ADD_MULTIPLIED_BASE);
 		double jump = d.has(Stat.AGILITY, 1) ? Math.min(0.25, 0.03 + 0.0035 * (agi - 15)) : 0;
 		mod(p, Attributes.JUMP_STRENGTH, "jump", jump + 0.08 * d.rank(PassiveSkill.SPRINGS), Operation.ADD_VALUE);
 		double fall = d.has(Stat.AGILITY, 3) ? Math.min(0.8, 0.2 + 0.01 * (agi - 60)) : 0;
 		mod(p, Attributes.FALL_DAMAGE_MULTIPLIER, "fall", -Math.min(0.95, fall + 0.25 * d.rank(PassiveSkill.FEATHER_FALL)), Operation.ADD_VALUE);
-		mod(p, Attributes.WATER_MOVEMENT_EFFICIENCY, "swim", 0.006 * agi + 0.15 * d.rank(PassiveSkill.GILLS), Operation.ADD_VALUE);
+		mod(p, Attributes.WATER_MOVEMENT_EFFICIENCY, "swim", (d.has(Stat.AGILITY, 0) ? 0.006 * agi : 0) + 0.15 * d.rank(PassiveSkill.GILLS), Operation.ADD_VALUE);
 
 		// ---- ENDURANCE
-		mod(p, Attributes.MAX_HEALTH, "health", 1.0 * end + 2.0 * d.rank(PassiveSkill.HEARTY) + 4.0 * d.rank(PassiveSkill.TITAN_FRAME), Operation.ADD_VALUE);
+		mod(p, Attributes.MAX_HEALTH, "health", (d.has(Stat.ENDURANCE, 0) ? 1.0 * end : 0) + 2.0 * d.rank(PassiveSkill.HEARTY) + 4.0 * d.rank(PassiveSkill.TITAN_FRAME), Operation.ADD_VALUE);
 		boolean nat = d.has(Stat.ENDURANCE, 2);
 		mod(p, Attributes.ARMOR, "armor", 2.0 * d.rank(PassiveSkill.IRON_SKIN) + 5.0 * d.rank(PassiveSkill.MONARCH_AEGIS) + (nat ? 1.0 + 0.2 * (end - 35) : 0), Operation.ADD_VALUE);
 		mod(p, Attributes.ARMOR_TOUGHNESS, "toughness", 1.0 * d.rank(PassiveSkill.THICK_SKIN) + 1.0 * d.rank(PassiveSkill.TITAN_FRAME)

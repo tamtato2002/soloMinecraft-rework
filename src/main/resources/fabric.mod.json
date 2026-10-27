@@ -11,7 +11,10 @@
     "main": ["com.example.solosystem.SoloSystemMod"],
     "client": ["com.example.solosystem.client.SoloSystemClient"]
   },
-  "mixins": ["solosystem.mixins.json"],
+  "mixins": [
+    "solosystem.mixins.json",
+    { "config": "solosystem.client.mixins.json", "environment": "client" }
+  ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.3",

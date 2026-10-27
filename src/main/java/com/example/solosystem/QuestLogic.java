@@ -148,6 +148,7 @@ public final class QuestLogic {
 		SoloConfig.Data cfg = SoloConfig.get();
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
 		boolean reset = !d.quests.isEmpty();
+		for (Quest old : d.quests) if (old.done && !old.claimed) grant(p, d, old, true); // expired before claiming: claim automatically
 		d.quests.clear();
 		d.questExpiry = now + DAY_TICKS;
 
@@ -218,6 +219,7 @@ public final class QuestLogic {
 		if (changed) SystemLogic.markDirty(p);
 	}
 
+	/** Quest finished: the reward waits until the player presses CLAIM in the Daily Quest page. */
 	private static void complete(ServerPlayer p, PlayerData d, Quest q) {
 		q.done = true;
 		q.progress = q.target;
@@ -225,7 +227,28 @@ public final class QuestLogic {
 		QuestType type = QuestType.byId(q.type);
 		String label = type == null ? q.type : type.label;
 		SystemLogic.msg(p, "QUEST CLEAR [" + tierRarity(t).name() + "]: " + label + " x" + q.target, tierRarity(t).color);
-		SystemLogic.msg(p, "Reward: " + rewardLine1(q), ChatFormatting.GREEN);
+		SystemLogic.msg(p, "Open the System menu (Y) > QUESTS and press CLAIM to collect your reward.", ChatFormatting.GREEN);
+		SystemLogic.sync(p);
+	}
+
+	/** Player pressed CLAIM on quest number {@code index}. */
+	public static void claim(ServerPlayer p, int index) {
+		PlayerData d = SystemLogic.data(p);
+		if (index < 0 || index >= d.quests.size()) return;
+		Quest q = d.quests.get(index);
+		if (!q.done || q.claimed) return;
+		grant(p, d, q, false);
+		SystemLogic.sync(p);
+	}
+
+	/** Give the reward of a finished quest: EXP, stat points, a chance of a skill, and the items. */
+	private static void grant(ServerPlayer p, PlayerData d, Quest q, boolean auto) {
+		q.claimed = true;
+		int t = Math.max(0, Math.min(4, q.tier));
+		QuestType type = QuestType.byId(q.type);
+		String label = type == null ? q.type : type.label;
+		SystemLogic.msg(p, (auto ? "Daily quests reset - reward auto-claimed: " : "Reward claimed: ") + label + " [" + tierRarity(t).name() + "]", ChatFormatting.GREEN);
+		SystemLogic.msg(p, rewardLine1(q), ChatFormatting.GREEN);
 
 		d.points += q.rewardPoints;
 		SystemLogic.addExpRaw(p, q.rewardExp);
@@ -236,7 +259,6 @@ public final class QuestLogic {
 			give(p, s);
 		}
 		SystemLogic.msg(p, rewardLine2(q), ChatFormatting.GREEN);
-		SystemLogic.sync(p);
 	}
 
 	/** Spawn an item at the player's feet (picked up automatically). */
