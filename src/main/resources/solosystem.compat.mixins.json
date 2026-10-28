@@ -1,0 +1,6 @@
+{
+  "required": false,
+  "package": "com.example.solosystem.mixin.compat",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": ["ItemStackMixin"]
+}
