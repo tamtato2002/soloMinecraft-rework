@@ -1,6 +1,0 @@
-{
-  "required": false,
-  "package": "com.example.solosystem.mixin.client",
-  "compatibilityLevel": "JAVA_25",
-  "client": ["ToastManagerMixin"]
-}
