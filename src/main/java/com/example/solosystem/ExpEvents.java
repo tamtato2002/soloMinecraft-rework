@@ -38,12 +38,7 @@ public final class ExpEvents {
 		PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, be) -> {
 			if (!(player instanceof ServerPlayer sp) || sp.isCreative()) return;
 			SystemLogic.addExp(sp, blockExp(state, state.getDestroySpeed(level, pos)));
-			QuestLogic.progress(sp, QuestType.MINE, 1);
 			boolean stone = state.is(SoloTags.STONE_OVERWORLD) || state.is(SoloTags.STONE_NETHER);
-			if (state.is(BlockTags.LOGS)) QuestLogic.progress(sp, QuestType.CHOP, 1);
-			if (isOre(state)) QuestLogic.progress(sp, QuestType.ORE, 1);
-			if (stone) QuestLogic.progress(sp, QuestType.STONE, 1);
-			if (state.is(CROPS)) QuestLogic.progress(sp, QuestType.HARVEST, 1);
 			blockSkillRoll(sp, state, stone);
 			QolSkills.onBlockBroken(sp, level, pos, state, be);
 		});
@@ -96,8 +91,6 @@ public final class ExpEvents {
 		double exp = hp * (hostile ? 0.8 : 0.3) + (hostile ? 4 : 0);
 		if (boss) exp += 1000;
 		SystemLogic.addExp(sp, exp);
-		if (hostile) QuestLogic.progress(sp, QuestType.KILL, 1);
-		else QuestLogic.progress(sp, QuestType.HUNT, 1);
 
 		// skill drop from monsters
 		double chance = boss ? 1.0 : hostile ? Math.min(0.5, 0.02 + hp * 0.002) : 0.005;
@@ -124,7 +117,6 @@ public final class ExpEvents {
 		int tier = stack.getRarity().ordinal(); // COMMON, UNCOMMON, RARE, EPIC
 		double exp = 1.0 + amount * 0.5 + tier * 5.0;
 		SystemLogic.addExp(sp, exp);
-		QuestLogic.progress(sp, QuestType.CRAFT, amount);
 		SystemLogic.rollSkill(sp, 0.004 + tier * 0.01, tier * 0.5);
 	}
 
@@ -134,7 +126,6 @@ public final class ExpEvents {
 		if (path.contains("ingot") || path.contains("netherite") || path.equals("diamond") || path.equals("emerald")) per += 3.0;
 		else if (path.contains("cooked") || path.contains("baked") || path.contains("steak")) per += 1.0;
 		SystemLogic.addExp(sp, per * amount);
-		QuestLogic.progress(sp, QuestType.SMELT, amount);
 		SystemLogic.rollSkill(sp, 0.002 * amount, 0);
 	}
 }

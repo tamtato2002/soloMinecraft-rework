@@ -2,28 +2,34 @@ package com.example.solosystem;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 /**
- * Daily quests: random quests (COMMON..LEGENDARY). They reset every 24000 game ticks
- * (= 1 Minecraft day, ~20 real minutes; sleeping does not skip it). Rewards are rolled randomly per quest
- * and can include items from other mods (see extraQuestRewards in config/solosystem.json).
+ * Daily quests. They reset every 24000 game ticks (1 Minecraft day, ~20 real minutes).
+ * Quests come from QuestCatalog (230+ built-in + automatic ones for other mods), are balanced by the time they take
+ * (see QuestCatalog), and rewards are random per quest - including items from other mods.
+ * Rewards are collected with the CLAIM button; unclaimed ones are claimed automatically at the reset.
  */
 public final class QuestLogic {
 	public static final long DAY_TICKS = 24000L;
 
-	private static final double[] MULT = {1, 2, 3.5, 6, 10};
+	/** seconds of work a quest of each tier should take (see QuestCatalog.sec) */
+	private static final double[] BUDGET = {100, 210, 360, 560, 840};
 	private static final int[] TIER_WEIGHT = {40, 28, 18, 10, 4};
 
-	private static final int[] EXP_BASE = {80, 200, 500, 1200, 3000};
+	private static final int[] EXP_BASE = {60, 160, 400, 900, 2000};
 	private static final int[] PTS_MIN = {0, 0, 1, 2, 4};
 	private static final int[] PTS_MAX = {1, 2, 3, 5, 8};
 	private static final double[] SK_MIN = {0.05, 0.20, 0.50, 0.80, 1.0};
@@ -51,7 +57,7 @@ public final class QuestLogic {
 
 	public static SkillRarity tierRarity(int tier) { return SkillRarity.values()[Math.max(0, Math.min(4, tier))]; }
 
-	// ---------------------------------------------------------------- reward description (server + client)
+	// ================================================================ reward description (server + client)
 
 	public static List<ItemStack> itemStacks(Quest q) {
 		List<ItemStack> out = new ArrayList<>();
@@ -82,19 +88,47 @@ public final class QuestLogic {
 		return sb.toString();
 	}
 
-	// ---------------------------------------------------------------- generation
-
-	public static long gameTime(ServerPlayer p) { return p.level().getServer().overworld().getGameTime(); }
-
-	public static void ensure(ServerPlayer p, PlayerData d) {
-		long now = gameTime(p);
-		if (d.quests.isEmpty() || now >= d.questExpiry || d.questExpiry - now > DAY_TICKS) generate(p, d, now);
-	}
+	// ================================================================ items from OTHER MODS as rewards
 
 	private static List<List<Reward>> modded;
 
-	/** Find items added by other mods and sort them into tiers by durability / item rarity. Done once, lazily. */
-	private static void scanModded() {
+	private static final String[] JUNK = {"spawn_egg", "debug", "creative", "command", "barrier", "structure", "test_", "_test", "admin",
+		"cheat", "placeholder", "missing", "unused", "wip", "dev_", "_dev", "unobtainable"};
+
+	/** -1 = not a sensible reward, otherwise the natural tier 0..4 of an item that comes from a mod. */
+	private static int moddedTier(Item it, String path) {
+		for (String j : JUNK) if (path.contains(j)) return -1;
+		ItemStack st = new ItemStack(it, 1);
+		int max = st.getMaxDamage();
+		if (max > 0 && LootLogic.categoryOf(it) >= 0) return max < 300 ? 1 : max < 900 ? 2 : max < 2000 ? 3 : 4; // tools, weapons, armor
+		if (max > 0) return 1;
+
+		int tier = -1;
+		int rar = st.getRarity().ordinal(); // COMMON, UNCOMMON, RARE, EPIC
+		if (rar >= 1) tier = Math.min(4, rar);
+
+		int byName = nameTier(path);
+		if (byName >= 0) tier = Math.max(tier, byName);
+		if (tier < 0 && st.has(DataComponents.FOOD)) tier = 1;
+		if (tier < 0 && it instanceof BlockItem) return -1; // plain building blocks are not rewards
+		return tier;
+	}
+
+	private static boolean has(String path, String... words) {
+		for (String w : words) if (path.contains(w)) return true;
+		return false;
+	}
+
+	/** Guess how valuable a modded item is from its name (ingot, gem, dust, netherite ...). */
+	private static int nameTier(String path) {
+		if (has(path, "netherite", "mythril", "adamantite", "orichalcum", "unobtainium", "legend", "relic", "artifact", "nether_star", "dragon", "totem", "eternal", "divine")) return 3;
+		if (has(path, "diamond", "emerald", "gem", "crystal", "ruby", "sapphire", "topaz", "onyx", "jade", "opal", "platinum", "titanium", "cobalt", "osmium", "uranium", "tungsten")) return 2;
+		if (has(path, "ingot", "pearl", "essence", "alloy") || path.endsWith("_dust") || path.endsWith("_shard") || path.endsWith("_gear") || path.endsWith("_plate")) return 1;
+		if (has(path, "nugget", "scrap", "fragment") || path.startsWith("raw_") || path.endsWith("_chunk")) return 0;
+		return -1;
+	}
+
+	private static synchronized void scanModded() {
 		if (modded != null) return;
 		modded = new ArrayList<>();
 		for (int i = 0; i < 5; i++) modded.add(new ArrayList<>());
@@ -103,36 +137,32 @@ public final class QuestLogic {
 				if (it == Items.AIR) continue;
 				String id = ItemIds.idOf(it);
 				if (id.startsWith("minecraft:") || id.startsWith("solosystem:")) continue;
-				ItemStack st = new ItemStack(it, 1);
-				int max = st.getMaxDamage();
-				int cat = LootLogic.categoryOf(it);
-				int natural;
-				if (cat >= 0 && max > 0) {
-					natural = max < 300 ? 1 : max < 900 ? 2 : max < 2000 ? 3 : 4; // modded weapons / armor / tools
-				} else {
-					int rar = st.getRarity().ordinal(); // COMMON, UNCOMMON, RARE, EPIC
-					if (rar <= 0) continue;               // skip plain items (blocks, junk)
-					natural = rar == 1 ? 1 : rar == 2 ? 2 : 3;
+				int natural = moddedTier(it, id.substring(id.indexOf(':') + 1));
+				if (natural < 0) continue;
+				int stack = Math.max(1, new ItemStack(it, 1).getMaxStackSize());
+				for (int t = natural; t <= Math.min(4, natural + 1); t++) {
+					int[][] range = {{4, 10}, {3, 8}, {2, 5}, {1, 3}, {1, 2}};
+					int lo = stack == 1 ? 1 : Math.min(stack, range[t][0]), hi = stack == 1 ? 1 : Math.min(stack, range[t][1]);
+					modded.get(t).add(new Reward(id, lo, hi));
 				}
-				for (int t = natural; t <= Math.min(4, natural + 1); t++)
-					modded.get(t).add(new Reward(id, 1, (cat >= 0 && max > 0) ? 1 : 2));
 			}
 		} catch (Exception ignored) {}
 	}
 
-	private static List<Reward> pool(int tier, ThreadLocalRandom rnd) {
-		List<Reward> pool = new ArrayList<>(List.of(BUILTIN[tier]));
-		if (SoloConfig.get().autoModItems) {
+	/** Items from other mods that can be a reward on this tier: found automatically + the ones listed in the config. */
+	private static List<Reward> modPool(int tier) {
+		List<Reward> pool = new ArrayList<>();
+		SoloConfig.Data cfg = SoloConfig.get();
+		if (cfg.autoModItems) {
 			scanModded();
-			List<Reward> m = modded.get(tier);
-			for (int i = 0; i < 2 && !m.isEmpty(); i++) pool.add(m.get(rnd.nextInt(m.size())));
+			pool.addAll(modded.get(tier));
 		}
-		String[] extra = SoloConfig.get().extraQuestRewards[tier];
+		String[] extra = cfg.extraQuestRewards[tier];
 		if (extra != null) {
 			for (String e : extra) {
 				if (e == null) continue;
 				String[] parts = e.split(",");
-				if (ItemIds.item(parts[0]) == null) continue; // other mod not installed -> skip
+				if (ItemIds.item(parts[0]) == null) continue; // that mod is not installed
 				int min = 1, max = 1;
 				try {
 					if (parts.length > 1) min = Math.max(1, Integer.parseInt(parts[1].trim()));
@@ -144,53 +174,36 @@ public final class QuestLogic {
 		return pool;
 	}
 
-	private static void generate(ServerPlayer p, PlayerData d, long now) {
-		SoloConfig.Data cfg = SoloConfig.get();
-		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		boolean reset = !d.quests.isEmpty();
-		for (Quest old : d.quests) if (old.done && !old.claimed) grant(p, d, old, true); // expired before claiming: claim automatically
-		d.quests.clear();
-		d.questExpiry = now + DAY_TICKS;
+	private static List<String> rollItems(int tier, ThreadLocalRandom rnd) {
+		List<Reward> vanilla = new ArrayList<>(List.of(BUILTIN[tier]));
+		Collections.shuffle(vanilla);
+		List<Reward> mod = modPool(tier);
+		int n = tier <= 1 ? 2 : 3;
+		List<String> codes = new ArrayList<>();
+		Set<String> seen = new HashSet<>();
 
-		List<QuestType> types = new ArrayList<>(List.of(QuestType.values()));
-		Collections.shuffle(types);
-		int count = Math.max(1, Math.min(types.size(), cfg.questsPerDay));
-		// variety: avoid the types used yesterday when there are enough others
-		List<QuestType> fresh = new ArrayList<>();
-		for (QuestType t : types) if (!d.lastQuestTypes.contains(t.id)) fresh.add(t);
-		if (fresh.size() >= count) types = fresh;
-		List<String> used = new ArrayList<>();
-		int[] tierUse = new int[5];
-		for (int i = 0; i < count; i++) {
-			QuestType t = types.get(i);
-			used.add(t.id);
-			int tier = rollTier(rnd);
-			for (int tries = 0; tries < 4 && tierUse[tier] >= 1 + (i / 2); tries++) tier = rollTier(rnd); // spread the tiers
-			tierUse[tier]++;
-			double jitter = 0.85 + rnd.nextDouble() * 0.35;
-			int target = Math.max(1, (int) Math.round(t.base * MULT[tier] * jitter));
-
-			// random reward, rolled now and fixed for this quest
-			int exp = (int) Math.round(EXP_BASE[tier] * (0.7 + rnd.nextDouble() * 0.8) * cfg.questExpMultiplier);
-			int pts = PTS_MIN[tier] + rnd.nextInt(PTS_MAX[tier] - PTS_MIN[tier] + 1);
-			double sk = SK_MIN[tier] + rnd.nextDouble() * (SK_MAX[tier] - SK_MIN[tier]);
-			sk = Math.round(sk * 100) / 100.0;
-
-			List<Reward> pool = pool(tier, rnd);
-			Collections.shuffle(pool);
-			int n = Math.min(pool.size(), tier <= 1 ? 2 : 3);
-			List<String> codes = new ArrayList<>();
-			for (int k = 0; k < n; k++) {
-				Reward rw = pool.get(k);
-				int amount = rw.min() + rnd.nextInt(Math.max(1, rw.max() - rw.min() + 1));
-				codes.add(rw.id() + "|" + amount);
+		// most quests get at least one item from another mod when any are installed; high tiers sometimes two
+		if (!mod.isEmpty() && rnd.nextDouble() < 0.75) {
+			int slots = (tier >= 3 && mod.size() > 1 && rnd.nextDouble() < 0.4) ? 2 : 1;
+			for (int k = 0; k < slots; k++) {
+				Reward rw = mod.get(rnd.nextInt(mod.size()));
+				if (seen.add(rw.id())) codes.add(rw.id() + "|" + (rw.min() + rnd.nextInt(Math.max(1, rw.max() - rw.min() + 1))));
 			}
-			d.quests.add(new Quest(t.id, tier, target, 0, false, exp, pts, sk, codes));
 		}
-		d.lastQuestTypes.clear();
-		d.lastQuestTypes.addAll(used);
-		SystemLogic.msg(p, reset ? "A new day begins. Daily quests have reset!" : "[Daily Quest] has arrived!", ChatFormatting.YELLOW);
-		SystemLogic.sync(p);
+		for (Reward rw : vanilla) {
+			if (codes.size() >= n) break;
+			if (seen.add(rw.id())) codes.add(rw.id() + "|" + (rw.min() + rnd.nextInt(Math.max(1, rw.max() - rw.min() + 1))));
+		}
+		return codes;
+	}
+
+	// ================================================================ generation
+
+	public static long gameTime(ServerPlayer p) { return p.level().getServer().overworld().getGameTime(); }
+
+	public static void ensure(ServerPlayer p, PlayerData d) {
+		long now = gameTime(p);
+		if (d.quests.isEmpty() || now >= d.questExpiry || d.questExpiry - now > DAY_TICKS) generate(p, d, now);
 	}
 
 	private static int rollTier(ThreadLocalRandom rnd) {
@@ -204,29 +217,83 @@ public final class QuestLogic {
 		return 0;
 	}
 
-	// ---------------------------------------------------------------- progress + completion
-
-	public static void progress(ServerPlayer p, QuestType type, double amount) {
-		if (amount <= 0) return;
-		PlayerData d = SystemLogic.data(p);
-		boolean changed = false;
-		for (Quest q : d.quests) {
-			if (q.done || !q.type.equals(type.id)) continue;
-			q.progress = Math.min(q.target, q.progress + amount);
-			changed = true;
-			if (q.progress >= q.target) complete(p, d, q);
-		}
-		if (changed) SystemLogic.markDirty(p);
+	/** How many to do: about BUDGET[tier] seconds of work, scaled by level and the difficulty setting, kept inside the quest's own limits. */
+	private static int targetFor(QuestCatalog.Def def, int tier, double scale, ThreadLocalRandom rnd) {
+		double units = BUDGET[tier] / Math.max(0.05, def.sec());
+		int target = (int) Math.round(units * scale * (0.85 + rnd.nextDouble() * 0.30));
+		target = Math.max(def.min(), Math.min(def.max(), target));
+		if (target >= 1000) target = Math.round(target / 50f) * 50;
+		else if (target >= 200) target = Math.round(target / 10f) * 10;
+		else if (target >= 50) target = Math.round(target / 5f) * 5;
+		return Math.max(def.min(), Math.min(def.max(), target));
 	}
 
+	private static QuestCatalog.Def pick(List<QuestCatalog.Def> all, int tier, Set<String> families, Set<String> picked,
+										  List<String> yesterday, ThreadLocalRandom rnd) {
+		for (int relax = 0; relax < 3; relax++) {
+			List<QuestCatalog.Def> cand = new ArrayList<>();
+			for (QuestCatalog.Def d : all) {
+				if (d.minTier() > tier || picked.contains(d.id())) continue;
+				if (relax < 2 && yesterday.contains(d.id())) continue;   // not the same quest two days in a row
+				if (relax < 1 && families.contains(d.family())) continue; // different kinds of work on the same day
+				cand.add(d);
+			}
+			if (!cand.isEmpty()) return cand.get(rnd.nextInt(cand.size()));
+		}
+		return null;
+	}
+
+	private static void generate(ServerPlayer p, PlayerData d, long now) {
+		SoloConfig.Data cfg = SoloConfig.get();
+		ThreadLocalRandom rnd = ThreadLocalRandom.current();
+		boolean reset = !d.quests.isEmpty();
+		for (Quest old : d.quests) if (old.done && !old.claimed) grant(p, d, old, true); // expired before claiming: claim automatically
+		d.quests.clear();
+		d.questExpiry = now + DAY_TICKS;
+
+		List<QuestCatalog.Def> all = QuestCatalog.available();
+		int count = Math.max(1, Math.min(5, cfg.questsPerDay));
+		double scale = (1.0 + Math.min(0.5, d.level * 0.01)) * cfg.questDifficulty; // a little harder as you level
+		Set<String> families = new HashSet<>(), picked = new HashSet<>();
+		int[] tierUse = new int[5];
+		List<String> used = new ArrayList<>();
+
+		for (int i = 0; i < count; i++) {
+			int tier = rollTier(rnd);
+			for (int tries = 0; tries < 4 && tierUse[tier] >= 1 + (i / 2); tries++) tier = rollTier(rnd); // spread the tiers
+			tierUse[tier]++;
+			QuestCatalog.Def def = pick(all, tier, families, picked, d.lastQuestTypes, rnd);
+			if (def == null) break;
+			families.add(def.family());
+			picked.add(def.id());
+			used.add(def.id());
+
+			int target = targetFor(def, tier, scale, rnd);
+			double expScale = (1.0 + 0.05 * d.level) * cfg.questExpMultiplier;
+			int exp = (int) Math.round(EXP_BASE[tier] * (0.8 + rnd.nextDouble() * 0.5) * expScale);
+			int pts = PTS_MIN[tier] + rnd.nextInt(PTS_MAX[tier] - PTS_MIN[tier] + 1);
+			double sk = SK_MIN[tier] + rnd.nextDouble() * (SK_MAX[tier] - SK_MIN[tier]);
+			sk = Math.round(sk * 100) / 100.0;
+
+			Quest q = new Quest(def.id(), tier, target, 0, false, exp, pts, sk, rollItems(tier, rnd), false,
+				def.label(), def.kind(), def.filter(), def.scale(), 0);
+			q.base = QuestTracker.current(p, q); // progress counts from now
+			d.quests.add(q);
+		}
+		d.lastQuestTypes.clear();
+		d.lastQuestTypes.addAll(used);
+		SystemLogic.msg(p, reset ? "A new day begins. Daily quests have reset!" : "[Daily Quest] has arrived!", ChatFormatting.YELLOW);
+		SystemLogic.sync(p);
+	}
+
+	// ================================================================ completion + claiming
+
 	/** Quest finished: the reward waits until the player presses CLAIM in the Daily Quest page. */
-	private static void complete(ServerPlayer p, PlayerData d, Quest q) {
+	public static void finish(ServerPlayer p, PlayerData d, Quest q) {
 		q.done = true;
 		q.progress = q.target;
 		int t = Math.max(0, Math.min(4, q.tier));
-		QuestType type = QuestType.byId(q.type);
-		String label = type == null ? q.type : type.label;
-		SystemLogic.msg(p, "QUEST CLEAR [" + tierRarity(t).name() + "]: " + label + " x" + q.target, tierRarity(t).color);
+		SystemLogic.msg(p, "QUEST CLEAR [" + tierRarity(t).name() + "]: " + q.title() + " x" + q.target, tierRarity(t).color);
 		SystemLogic.msg(p, "Open the System menu (Y) > QUESTS and press CLAIM to collect your reward.", ChatFormatting.GREEN);
 		SystemLogic.sync(p);
 	}
@@ -245,9 +312,7 @@ public final class QuestLogic {
 	private static void grant(ServerPlayer p, PlayerData d, Quest q, boolean auto) {
 		q.claimed = true;
 		int t = Math.max(0, Math.min(4, q.tier));
-		QuestType type = QuestType.byId(q.type);
-		String label = type == null ? q.type : type.label;
-		SystemLogic.msg(p, (auto ? "Daily quests reset - reward auto-claimed: " : "Reward claimed: ") + label + " [" + tierRarity(t).name() + "]", ChatFormatting.GREEN);
+		SystemLogic.msg(p, (auto ? "Daily quests reset - reward auto-claimed: " : "Reward claimed: ") + q.title() + " [" + tierRarity(t).name() + "]", ChatFormatting.GREEN);
 		SystemLogic.msg(p, rewardLine1(q), ChatFormatting.GREEN);
 
 		d.points += q.rewardPoints;

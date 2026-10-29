@@ -258,8 +258,7 @@ public class SystemScreen extends Screen {
 		for (Quest q : d.quests) {
 			final int qi = index++;
 			SkillRarity r = QuestLogic.tierRarity(q.tier);
-			QuestType t = QuestType.byId(q.type);
-			String name = t == null ? q.type : t.label;
+			String name = q.title();
 			Component head = Component.literal("[" + r.name() + "] " + "*".repeat(Math.max(0, Math.min(4, q.tier)) + 1) + "  " + name + "  " + (int) q.progress + "/" + q.target).withStyle(r.color);
 			if (q.claimed) head = head.copy().append(Component.literal("  CLAIMED").withStyle(ChatFormatting.GREEN));
 			else if (q.done) head = head.copy().append(Component.literal("  COMPLETE").withStyle(ChatFormatting.YELLOW));
@@ -453,7 +452,7 @@ public class SystemScreen extends Screen {
 				rateRow(4, cx, y, "XP orb -> EXP", () -> c.orbExpFactor, v -> c.orbExpFactor = v, 0.25, 0, 10, 0.5, "x%.2f");
 				rateRow(5, cx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, 3, "%.0f");
 				rateRow(6, cx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, 75, "%.0f");
-				rateRow(7, cx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, 2, "%.1f");
+				rateRow(7, cx, y, "Quest difficulty", () -> c.questDifficulty, v -> c.questDifficulty = v, 0.25, 0.5, 3, 1.0, "x%.2f");
 				footY = y + 8 * 22 + 6;
 			}
 			case 2 -> { // ---------------- GENERAL
@@ -467,6 +466,7 @@ public class SystemScreen extends Screen {
 					rebuildWidgets();
 				}).bounds(lx, y + 4 * 21, 180, 20).build());
 				toggle(5, lx, y, "Toasts avoid overlap", () -> c.toastAvoidOverlap, v -> c.toastAvoidOverlap = v);
+				number(6, lx, y, "Toast time (s)", () -> c.toastSeconds, v -> c.toastSeconds = v, 0.5, 0.5, 10, "%.1f");
 
 				toggle(0, rx, y, "Resistance system", () -> c.enableResistance, v -> c.enableResistance = v);
 				toggle(1, rx, y, "Masterwork crafting", () -> c.enableMasterwork, v -> c.enableMasterwork = v);

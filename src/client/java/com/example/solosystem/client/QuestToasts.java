@@ -3,7 +3,6 @@ package com.example.solosystem.client;
 import com.example.solosystem.PlayerData;
 import com.example.solosystem.Quest;
 import com.example.solosystem.QuestLogic;
-import com.example.solosystem.QuestType;
 import com.example.solosystem.SkillRarity;
 import com.example.solosystem.SoloConfig;
 import java.util.ArrayList;
@@ -55,8 +54,7 @@ public final class QuestToasts {
 			Quest o = null;
 			for (Quest x : old.quests) if (x.type.equals(q.type) && x.tier == q.tier && x.target == q.target) o = x;
 			if (o == null) continue;
-			QuestType t = QuestType.byId(q.type);
-			String name = t == null ? q.type : t.label;
+			String name = q.title();
 			if (q.done && !o.done) push(q.type, name, q.target, q.target, q.tier, true, (int) o.progress);
 			else if (!q.done && (int) q.progress > (int) o.progress) push(q.type, name, (int) q.progress, q.target, q.tier, false, (int) o.progress);
 		}

@@ -201,6 +201,7 @@ public final class SystemLogic {
 			if (!p.isAlive()) continue;
 			PlayerData d = data(p);
 			orbs(p);
+			if (t % 10 == 0) QuestTracker.tick(p, d);
 			if (t % 4 == 0) magnet(p, d);
 			if (t % 10 == 0) hungerEfficiency(p, d);
 			if (t % 40 == 0) regen(p, d);
@@ -238,33 +239,28 @@ public final class SystemLogic {
 		if (dCm > 0) {
 			double blocks = dCm / 100.0;
 			addExp(p, blocks * 0.02); // 0.02 EXP per block
-			QuestLogic.progress(p, QuestType.WALK, blocks);
 			rollSkill(p, Math.min(0.5, blocks * 0.0001), 0); // exploring can teach a skill
 		}
 		long fish = cur[1] - last[1];
 		if (fish > 0) {
 			addExp(p, fish * 12.0);
-			QuestLogic.progress(p, QuestType.FISH, fish);
 			QolSkills.onFish(p, fish);
 			rollSkill(p, Math.min(1.0, 0.04 * fish), 0.5);   // fishing
 		}
 		long bred = cur[2] - last[2];
 		if (bred > 0) {
 			addExp(p, bred * 8.0);
-			QuestLogic.progress(p, QuestType.BREED, bred);
 			QolSkills.onBreed(p, bred);
 			rollSkill(p, Math.min(1.0, 0.03 * bred), 0);    // farming / ranching
 		}
 		long trade = cur[3] - last[3];
 		if (trade > 0) {
 			addExp(p, trade * 10.0);
-			QuestLogic.progress(p, QuestType.TRADE, trade);
 			rollSkill(p, Math.min(1.0, 0.04 * trade), 0.5);
 		}
 		long ench = cur[4] - last[4];
 		if (ench > 0) {
 			addExp(p, ench * 20.0);
-			QuestLogic.progress(p, QuestType.ENCHANT, ench);
 			rollSkill(p, Math.min(1.0, 0.1 * ench), 1.0);
 		}
 	}
