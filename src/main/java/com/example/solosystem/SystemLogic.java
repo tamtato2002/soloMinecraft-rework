@@ -211,7 +211,8 @@ public final class SystemLogic {
 			if (t % 20 == 0) {
 				applyAll(p, d);
 				pollStats(p);
-				QuestLogic.ensure(p, d);
+				try { QuestLogic.ensure(p, d); }
+				catch (Exception e) { SoloSystemMod.LOGGER.error("Daily quest reset failed", e); }
 			}
 			if (t % 200 == 0) stomach(p, d);
 			if (t % 2 == 0 && DIRTY.remove(p.getUUID())) sync(p);

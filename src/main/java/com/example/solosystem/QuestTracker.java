@@ -2,8 +2,10 @@ package com.example.solosystem;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
@@ -72,64 +74,121 @@ public final class QuestTracker {
 	}
 
 	// ---------------------------------------------------------------- resolving filters (cached)
+	//
+	// Exact ids ("modid:thing") are looked up directly in the registry (O(1)). Only the group / pattern tokens
+	// ("@ores", "@suffix:_pickaxe" ...) need a registry scan, and each such token is scanned ONCE and cached.
+	// (Scanning the whole registry for every quest definition made the first quest generation freeze the server
+	// for a very long time when many mods were installed.)
+
+	private static final Map<String, List<Block>> BLOCK_TOKENS = new HashMap<>();
+	private static final Map<String, List<Item>> ITEM_TOKENS = new HashMap<>();
+	private static final Map<String, List<EntityType<?>>> ENTITY_TOKENS = new HashMap<>();
+
+	private static Identifier tryIdent(String id) {
+		try { return ident(id); } catch (Exception e) { return null; }
+	}
+
+	private static List<Block> scanBlocks(String t) {
+		List<Block> out = new ArrayList<>();
+		for (Block b : BuiltInRegistries.BLOCK) {
+			boolean m = switch (t) {
+				case "@ores" -> isOre(b);
+				case "@logs" -> b.defaultBlockState().is(BlockTags.LOGS);
+				case "@stone" -> isStone(b);
+				case "@crops" -> isCrop(b);
+				default -> tokenMatch(t, BuiltInRegistries.BLOCK.getKey(b).toString());
+			};
+			if (m) out.add(b);
+		}
+		return out;
+	}
+
+	private static List<Item> scanItems(String t) {
+		List<Item> out = new ArrayList<>();
+		for (Item it : BuiltInRegistries.ITEM) {
+			if (it == Items.AIR) continue;
+			boolean m = t.equals("@food") ? new ItemStack(it, 1).has(DataComponents.FOOD) : tokenMatch(t, BuiltInRegistries.ITEM.getKey(it).toString());
+			if (m) out.add(it);
+		}
+		return out;
+	}
+
+	private static List<EntityType<?>> scanEntities(String t) {
+		List<EntityType<?>> out = new ArrayList<>();
+		for (EntityType<?> et : BuiltInRegistries.ENTITY_TYPE) {
+			boolean m = switch (t) {
+				case "@hostile" -> et.getCategory() == MobCategory.MONSTER;
+				case "@animals" -> et.getCategory() == MobCategory.CREATURE;
+				default -> tokenMatch(t, BuiltInRegistries.ENTITY_TYPE.getKey(et).toString());
+			};
+			if (m) out.add(et);
+		}
+		return out;
+	}
 
 	public static List<Block> blocks(String filter) {
-		return BLOCKS.computeIfAbsent(filter, f -> {
-			String[] toks = f.split(",");
-			List<Block> out = new ArrayList<>();
-			for (Block b : BuiltInRegistries.BLOCK) {
-				String id = BuiltInRegistries.BLOCK.getKey(b).toString();
-				for (String raw : toks) {
-					String t = raw.trim();
-					boolean m = switch (t) {
-						case "@ores" -> isOre(b);
-						case "@logs" -> b.defaultBlockState().is(BlockTags.LOGS);
-						case "@stone" -> isStone(b);
-						case "@crops" -> isCrop(b);
-						default -> tokenMatch(t, id);
-					};
-					if (m) { out.add(b); break; }
-				}
+		List<Block> cached = BLOCKS.get(filter);
+		if (cached != null) return cached;
+		Set<Block> out = new LinkedHashSet<>();
+		for (String raw : filter.split(",")) {
+			String t = raw.trim();
+			if (t.isEmpty()) continue;
+			if (t.startsWith("@")) {
+				List<Block> l = scanOnce(BLOCK_TOKENS, t, QuestTracker::scanBlocks);
+				out.addAll(l);
+			} else {
+				Identifier id = tryIdent(t);
+				if (id != null) BuiltInRegistries.BLOCK.getOptional(id).ifPresent(out::add);
 			}
-			return out;
-		});
+		}
+		List<Block> res = new ArrayList<>(out);
+		BLOCKS.put(filter, res);
+		return res;
 	}
 
 	public static List<Item> items(String filter) {
-		return ITEMS.computeIfAbsent(filter, f -> {
-			String[] toks = f.split(",");
-			List<Item> out = new ArrayList<>();
-			for (Item it : BuiltInRegistries.ITEM) {
-				if (it == Items.AIR) continue;
-				String id = BuiltInRegistries.ITEM.getKey(it).toString();
-				for (String raw : toks) {
-					String t = raw.trim();
-					boolean m = t.equals("@food") ? new ItemStack(it, 1).has(DataComponents.FOOD) : tokenMatch(t, id);
-					if (m) { out.add(it); break; }
-				}
+		List<Item> cached = ITEMS.get(filter);
+		if (cached != null) return cached;
+		Set<Item> out = new LinkedHashSet<>();
+		for (String raw : filter.split(",")) {
+			String t = raw.trim();
+			if (t.isEmpty()) continue;
+			if (t.startsWith("@")) {
+				out.addAll(scanOnce(ITEM_TOKENS, t, QuestTracker::scanItems));
+			} else {
+				Identifier id = tryIdent(t);
+				if (id != null) BuiltInRegistries.ITEM.getOptional(id).filter(it -> it != Items.AIR).ifPresent(out::add);
 			}
-			return out;
-		});
+		}
+		List<Item> res = new ArrayList<>(out);
+		ITEMS.put(filter, res);
+		return res;
 	}
 
 	public static List<EntityType<?>> entities(String filter) {
-		return ENTITIES.computeIfAbsent(filter, f -> {
-			String[] toks = f.split(",");
-			List<EntityType<?>> out = new ArrayList<>();
-			for (EntityType<?> et : BuiltInRegistries.ENTITY_TYPE) {
-				String id = BuiltInRegistries.ENTITY_TYPE.getKey(et).toString();
-				for (String raw : toks) {
-					String t = raw.trim();
-					boolean m = switch (t) {
-						case "@hostile" -> et.getCategory() == MobCategory.MONSTER;
-						case "@animals" -> et.getCategory() == MobCategory.CREATURE;
-						default -> tokenMatch(t, id);
-					};
-					if (m) { out.add(et); break; }
-				}
+		List<EntityType<?>> cached = ENTITIES.get(filter);
+		if (cached != null) return cached;
+		Set<EntityType<?>> out = new LinkedHashSet<>();
+		for (String raw : filter.split(",")) {
+			String t = raw.trim();
+			if (t.isEmpty()) continue;
+			if (t.startsWith("@")) {
+				out.addAll(scanOnce(ENTITY_TOKENS, t, QuestTracker::scanEntities));
+			} else {
+				Identifier id = tryIdent(t);
+				if (id != null) BuiltInRegistries.ENTITY_TYPE.getOptional(id).ifPresent(out::add);
 			}
-			return out;
-		});
+		}
+		List<EntityType<?>> res = new ArrayList<>(out);
+		ENTITIES.put(filter, res);
+		return res;
+	}
+
+	/** Scan a pattern token once, then reuse the result. */
+	private static <T> List<T> scanOnce(Map<String, List<T>> cache, String token, java.util.function.Function<String, List<T>> scan) {
+		List<T> l = cache.get(token);
+		if (l == null) { l = scan.apply(token); cache.put(token, l); }
+		return l;
 	}
 
 	private static Identifier ident(String id) {

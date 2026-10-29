@@ -12,9 +12,13 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.Identifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
 public class SoloSystemMod implements ModInitializer {
 	public static final String MOD_ID = "solosystem";
+	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	public static Identifier id(String path) { return Identifier.fromNamespaceAndPath(MOD_ID, path); }
 
@@ -40,6 +44,7 @@ public class SoloSystemMod implements ModInitializer {
 			SystemLogic.applyAll(newP, SystemLogic.data(newP));
 			SystemLogic.sync(newP);
 		});
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> QuestLogic.warmUp());
 		ServerTickEvents.END_SERVER_TICK.register(SystemLogic::tick);
 
 		ExpEvents.register();

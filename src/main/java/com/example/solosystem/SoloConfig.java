@@ -19,7 +19,7 @@ public final class SoloConfig {
 		public double lootMultiplier = 1.0;
 		public double questExpMultiplier = 1.0;
 		public int questsPerDay = 3;
-		public double questDifficulty = 1.0; // multiplies quest targets (0.25 = a quarter of the work, 0.5 = half as much work, 2.0 = double)
+		public double questDifficulty = 1.0; // multiplies quest targets (0.5 = half as much work, 2.0 = double)
 		public boolean enableDodge = true;
 		public boolean enableCrit = true;
 		public boolean enableResistance = true;
@@ -121,7 +121,7 @@ public final class SoloConfig {
 		d.skillDropMultiplier = Math.max(0, Math.min(10, d.skillDropMultiplier));
 		d.lootMultiplier = Math.max(0, Math.min(10, d.lootMultiplier));
 		d.questExpMultiplier = Math.max(0.1, Math.min(10, d.questExpMultiplier));
-		d.questDifficulty = Math.max(0.25, Math.min(3.0, d.questDifficulty));
+		d.questDifficulty = Math.max(0.5, Math.min(3.0, d.questDifficulty));
 		d.questsPerDay = Math.max(1, Math.min(5, d.questsPerDay));
 		d.resistMaxPercent = Math.max(5, Math.min(95, d.resistMaxPercent));
 		d.toastSeconds = Math.max(0.5, Math.min(10, d.toastSeconds));

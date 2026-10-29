@@ -25,9 +25,9 @@ import net.minecraft.world.item.Items;
 public final class QuestLogic {
 	public static final long DAY_TICKS = 24000L;
 
-	/** seconds of work a quest of each tier should take (see QuestCatalog.sec). Kept low so 3 quests fit easily in one 20-minute day. */
-	private static final double[] BUDGET = {60, 110, 180, 270, 400};
-	private static final int[] TIER_WEIGHT = {48, 28, 14, 7, 3};
+	/** seconds of work a quest of each tier should take (see QuestCatalog.sec) */
+	private static final double[] BUDGET = {100, 210, 360, 560, 840};
+	private static final int[] TIER_WEIGHT = {40, 28, 18, 10, 4};
 
 	private static final int[] EXP_BASE = {60, 160, 400, 900, 2000};
 	private static final int[] PTS_MIN = {0, 0, 1, 2, 4};
@@ -199,6 +199,16 @@ public final class QuestLogic {
 
 	// ================================================================ generation
 
+	/** Build the quest catalog and the modded reward pool once, at server start, instead of during the first reset. */
+	public static void warmUp() {
+		try {
+			QuestCatalog.available();
+			if (SoloConfig.get().autoModItems) scanModded();
+		} catch (Exception e) {
+			SoloSystemMod.LOGGER.error("Quest warm-up failed", e);
+		}
+	}
+
 	public static long gameTime(ServerPlayer p) { return p.level().getServer().overworld().getGameTime(); }
 
 	public static void ensure(ServerPlayer p, PlayerData d) {
@@ -217,10 +227,10 @@ public final class QuestLogic {
 		return 0;
 	}
 
-	/** How many to do: at most BUDGET[tier] seconds of work, scaled by level and the difficulty setting, kept inside the quest's own limits. */
+	/** How many to do: about BUDGET[tier] seconds of work, scaled by level and the difficulty setting, kept inside the quest's own limits. */
 	private static int targetFor(QuestCatalog.Def def, int tier, double scale, ThreadLocalRandom rnd) {
 		double units = BUDGET[tier] / Math.max(0.05, def.sec());
-		int target = (int) Math.round(units * scale * (0.75 + rnd.nextDouble() * 0.25)); // never above the budget, up to 25% under
+		int target = (int) Math.round(units * scale * (0.85 + rnd.nextDouble() * 0.30));
 		target = Math.max(def.min(), Math.min(def.max(), target));
 		if (target >= 1000) target = Math.round(target / 50f) * 50;
 		else if (target >= 200) target = Math.round(target / 10f) * 10;
@@ -228,16 +238,12 @@ public final class QuestLogic {
 		return Math.max(def.min(), Math.min(def.max(), target));
 	}
 
-	/** A quest whose smallest allowed target already takes far longer than the tier's time budget is not offered. */
-	private static boolean fits(QuestCatalog.Def d, int tier) { return d.min() * d.sec() <= BUDGET[tier] * 1.25; }
-
 	private static QuestCatalog.Def pick(List<QuestCatalog.Def> all, int tier, Set<String> families, Set<String> picked,
 										  List<String> yesterday, ThreadLocalRandom rnd) {
 		for (int relax = 0; relax < 3; relax++) {
 			List<QuestCatalog.Def> cand = new ArrayList<>();
 			for (QuestCatalog.Def d : all) {
 				if (d.minTier() > tier || picked.contains(d.id())) continue;
-				if (relax < 2 && !fits(d, tier)) continue;                // too slow for this tier
 				if (relax < 2 && yesterday.contains(d.id())) continue;   // not the same quest two days in a row
 				if (relax < 1 && families.contains(d.family())) continue; // different kinds of work on the same day
 				cand.add(d);
@@ -251,13 +257,20 @@ public final class QuestLogic {
 		SoloConfig.Data cfg = SoloConfig.get();
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
 		boolean reset = !d.quests.isEmpty();
-		for (Quest old : d.quests) if (old.done && !old.claimed) grant(p, d, old, true); // expired before claiming: claim automatically
+		// Take over the old quests and start the new day FIRST, so that a problem while auto-claiming can never
+		// leave the data in the "expired" state (which would re-trigger this method over and over).
+		List<Quest> expired = new ArrayList<>(d.quests);
 		d.quests.clear();
 		d.questExpiry = now + DAY_TICKS;
+		for (Quest old : expired) {
+			if (!old.done || old.claimed) continue;
+			try { grant(p, d, old, true); } // expired before claiming: claim automatically
+			catch (Exception e) { SoloSystemMod.LOGGER.error("Could not auto-claim quest {}", old.type, e); }
+		}
 
 		List<QuestCatalog.Def> all = QuestCatalog.available();
 		int count = Math.max(1, Math.min(5, cfg.questsPerDay));
-		double scale = (1.0 + Math.min(0.15, d.level * 0.005)) * cfg.questDifficulty; // only slightly harder as you level (max +15%)
+		double scale = (1.0 + Math.min(0.5, d.level * 0.01)) * cfg.questDifficulty; // a little harder as you level
 		Set<String> families = new HashSet<>(), picked = new HashSet<>();
 		int[] tierUse = new int[5];
 		List<String> used = new ArrayList<>();
