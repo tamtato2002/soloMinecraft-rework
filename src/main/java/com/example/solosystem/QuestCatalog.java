@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.CropBlock;
  * monsters and animals that other mods add.
  *
  * Balance: each quest has "sec" = about how many seconds one unit takes an average player. The target is
- * (time budget of the tier) / sec, so an Uncommon quest is always ~3.5 minutes of work, a Legendary one ~14 minutes,
+ * (time budget of the tier) / sec, so an Uncommon quest is always ~2 minutes of work, a Legendary one ~6-7 minutes,
  * whatever the activity. Rare things (diamonds, ghasts ...) simply get small numbers.
  */
 public final class QuestCatalog {
@@ -270,7 +270,7 @@ public final class QuestCatalog {
 		"misc|stat|m_brew|Use a Brewing Stand|minecraft:interact_with_brewingstand|50|2|1|6|1",
 		"social|stat|m_bell|Ring a village bell|minecraft:bell_ring|10|1|1|6|1",
 		"misc|xp|m_xp|Collect experience|-|3|0|20|500|1",
-		"misc|active|m_time|Stay active (seconds)|-|1|0|90|900|1"
+		"misc|active|m_time|Stay active (seconds)|-|1|0|60|400|1"
 	};
 
 	private static List<Def> available;

@@ -452,7 +452,7 @@ public class SystemScreen extends Screen {
 				rateRow(4, cx, y, "XP orb -> EXP", () -> c.orbExpFactor, v -> c.orbExpFactor = v, 0.25, 0, 10, 0.5, "x%.2f");
 				rateRow(5, cx, y, "Quests / day", () -> (double) c.questsPerDay, v -> c.questsPerDay = (int) Math.round(v), 1, 1, 5, 3, "%.0f");
 				rateRow(6, cx, y, "Resist cap %", () -> (double) c.resistMaxPercent, v -> c.resistMaxPercent = (int) Math.round(v), 5, 10, 95, 75, "%.0f");
-				rateRow(7, cx, y, "Quest difficulty", () -> c.questDifficulty, v -> c.questDifficulty = v, 0.25, 0.5, 3, 1.0, "x%.2f");
+				rateRow(7, cx, y, "Quest difficulty", () -> c.questDifficulty, v -> c.questDifficulty = v, 0.25, 0.25, 3, 1.0, "x%.2f");
 				footY = y + 8 * 22 + 6;
 			}
 			case 2 -> { // ---------------- GENERAL
